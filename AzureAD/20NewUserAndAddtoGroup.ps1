@@ -103,7 +103,7 @@ while ($UserNumber -lt 21) {
                     "$createduser.UserPrincipalName, $timestamp, result:Failure" | Out-File $errorlogfile -Append
                     $error = Write-Error $_       
                     $body = "{'text':'unknown exeption - 20 new users script'}"
-                    Invoke-RestMethod -Method post -Body $body -Uri "https://wermic.webhook.office.com/webhookb2/603fd0bd-b051-4dc8-836b-5e3f51b15518@8a94ab74-f3c6-4d02-89c7-ed0f47d6c544/IncomingWebhook/593d507d317a4796baf1b53ec7659161/f81641ed-4bfd-4a32-813e-5ab9b1e7d619"
+                    Invoke-RestMethod -Method post -Body $body -Uri "https://tenant.webhook.office.com/webhookb2/b051-4dc8-836b-5518@8a94ab74-f3c6-4d02-89c7-ed0f47d6c544/IncomingWebhook/593d507d317aaf1b53ec7659161/f81641ed-4bfd-4a32-813e-5ab9b1e7d619"
                     
                     #region craftig an e-mail
                     $SendingDateTime = "{0:G}" -f (Get-Date)
