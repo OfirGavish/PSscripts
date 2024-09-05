@@ -13,7 +13,7 @@ There are no parameters for this script.
 Example usage of the script:
     run in azure automation runbook, make sure to assign the correct permissions to the managed identity.
     email is sent using Azure Email Communication Service, feel free to change the email settings.
-    You can export the information to a CSV file and send it as an attachment, uncomment line 64 and add the attachment flag to the Send-MailMessage command.
+    You can export the information to a CSV file and send it as an attachment, uncomment line 65 and add the attachment flag to the Send-MailMessage command.
 
 .NOTES
 Author: Ofir Gavish
