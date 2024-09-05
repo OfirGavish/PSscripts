@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-This script is located at Github.
+This script is located at https://github.com/OfirGavish/PSscripts/edit/main/Exchange%20Online/EXOMailboxSize.ps1.
 
 .DESCRIPTION
 This script is used for detection of Exchange Online Mailboxes with over 70 GB of Used space.
