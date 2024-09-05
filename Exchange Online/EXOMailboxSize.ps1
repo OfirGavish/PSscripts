@@ -17,6 +17,7 @@ Example usage of the script:
 
 .NOTES
 Author: Ofir Gavish
+Special Thanks to Ram Apter @ https://github.com/Rmap91
 Date: 09/05/2024
 #>
 
