@@ -1,6 +1,5 @@
 ﻿#region variables
-$keyVaultName = "DeviceCredsBackupVault"
-
+$keyVaultName = "BitLockerKeysBackupVault"
 
 #region connect to services
 Connect-AzAccount -CertificateThumbprint "THUMBPRINT" -ApplicationId "APP-ID" -Tenant "TenantID" -ServicePrincipal
