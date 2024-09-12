@@ -190,8 +190,8 @@ $Table = "S1RemediationStatus_CL"
 
 
 
-$DceURI = "https://yourloganalyticsuploadendpoint-rm75.westeurope-1.ingest.monitor.azure.com"
-$DcrId = "dcr-xxxxxxxxx9017877d2e31f3"
+$DceURI = "https://yourloganalyticsuploadendpoint-xxxx.westeurope-1.ingest.monitor.azure.com"
+$DcrId = "dcr-xxxxxxxxxxxxxxxxxx"
 
 # Connect to Azure with system-assigned managed identity
 Connect-AzAccount -Identity | Out-Null
