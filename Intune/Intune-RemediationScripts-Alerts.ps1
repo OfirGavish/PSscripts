@@ -22,6 +22,11 @@ Date: 09/2024
 Version: 2.0
 #>
 
+#Variables
+$RemediationID = <ProactiveRemediationPolicyID>
+$MailSender = 'user@domain.com'
+$recipient = @(@{emailAddress = @{address = 'address@domain.com'}}) #(recipient addresses in the form of a hash table)
+$Subject = 'NAME-Proactive-Remediation-Alerts'
 
 #Region Connect to Microsoft Graph API for Intune Remediations status
 function Get-GraphAPIAccessToken {
@@ -42,7 +47,7 @@ $graphApiHeader = @{ Authorization = "Bearer $graphApiToken" }
 
 #Got authentication token, running query
 #Query Intune Proactive Remediation Policy Device Status (Fill in Policy ID)
-$uri2 = "https://graph.microsoft.com/beta/deviceManagement/deviceHealthScripts/<ProactiveRemediationPolicyID>/deviceRunStates"
+$uri2 = "https://graph.microsoft.com/beta/deviceManagement/deviceHealthScripts/$RemediationID/deviceRunStates"
 try
 {
   $response = (Invoke-RestMethod -Uri $uri2 -Headers $graphApiHeader -Method Get).Value
@@ -115,7 +120,7 @@ $body = convertto-json $JSONBody -Depth 50
 if ($alert){Invoke-RestMethod -Method post -ContentType 'Application/Json' -Body $body -Uri "https://wermic.webhook.office.com/webhookb2/603f3321bd-b051-4dc8-836b-5e3f51235568@8a94ab74-f14378xxxx-4d02-89c7-ed0f224567644/IncomingWebhook/5xxxxxxx7659161/f8xxxxxx-4bfd-4a32-813e-xxxxxxd619"
 
 
-##crafting html body for email (Fill in logo or remove line 90, Fill in specific Intune device status URL)
+##crafting html body for email (Fill in logo or remove line 160, Fill in specific Intune device status URL)
 $htmlbody = @"
 <html>
   <style>
@@ -163,19 +168,17 @@ $htmlbody = @"
 "@
 }
 }
-#region craftig an e-mail (Fill in user to send as, recipient addresses(in the form of a hash table)
+#region craftig an e-mail 
 $MessageBody = @{
     content = $htmlbody
     contentType = 'HTML'
 }
-$MailSender = 'user@domain.com'
-$recipient = @(@{emailAddress = @{address = 'address@domain.com'}})
 #endregion
 
 #region Sending the e-mail (Fill in Subject)
 try
 {
-$NewMessage = New-MguserMessage -UserId $Mailsender -Body $MessageBody -ToRecipients $recipient -Subject 'NAME-Proactive-Remediation-Alerts'
+$NewMessage = New-MguserMessage -UserId $Mailsender -Body $MessageBody -ToRecipients $recipient -Subject $Subject
 Send-MgUserMessage -UserId $MailSender -Messageid $newmessage.id
 #endregion
 }
