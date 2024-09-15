@@ -192,7 +192,7 @@ catch
 <#
 #region upload the data to Azure log analytics
 Add-Type -AssemblyName System.Web
-$Table = "S1RemediationStatus_CL"
+$Table = "YourRemediationStatus_CL"
 
 
 
