@@ -27,7 +27,7 @@ $RemediationID = <ProactiveRemediationPolicyID>
 $MailSender = 'user@domain.com'
 $recipient = @(@{emailAddress = @{address = 'address@domain.com'}}) #(recipient addresses in the form of a hash table)
 $Subject = 'NAME-Proactive-Remediation-Alerts'
-$TeamsWebhookURI = "https://wermic.webhook.office.com/webhookb2/603f3321bd-b051-4dc8-836b-5e3f51235568@8a94ab74-f14378xxxx-4d02-89c7-ed0f224567644/IncomingWebhook/5xxxxxxx7659161/f8xxxxxx-4bfd-4a32-813e-xxxxxxd619"
+$TeamsWebhookURI = "https://tenant.webhook.office.com/webhookb2/603fxxx-bxx-xxx-x36b-5xxxx3556xxxx4ab74-f14378xxxx-xxxx-xxx7-ed0fxxxxx644/IncomingWebhook/5xxxxxxx7659161/f8xxxxxx-4xxx-4xxx-813e-xxxxxxd619"
 
 #Region Connect to Microsoft Graph API for Intune Remediations status
 function Get-GraphAPIAccessToken {
