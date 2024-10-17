@@ -2,8 +2,8 @@
 $keyVaultName = "BitLockerKeysBackupVault"
 
 #region connect to services
-Connect-AzAccount -CertificateThumbprint "THUMBPRINT" -ApplicationId "APP-ID" -Tenant "TenantID" -ServicePrincipal
-Connect-MgGraph -ClientID "ClientID" -TenantId "TenantID" -CertificateThumbprint "THUMBPRINT"
+Connect-AzAccount -Identity
+Connect-MgGraph -ManagedIdentity
 Set-AzContext -SubscriptionName "SUB NAME"
 
 $bitkeys = Get-MgInformationProtectionBitlockerRecoveryKey -All
