@@ -1,0 +1,129 @@
+<#
+# PowerShell Script: Device Free Disk Space Alerts
+
+This PowerShell script monitors the free disk space on Windows devices managed by Microsoft Intune using the Microsoft Graph API. If any device has less than 20 GB of free storage, an email alert is sent to notify the helpdesk team.
+
+## **Functionality**
+
+1. **Get Graph API Access Token:**
+   - The script defines a function `Get-GraphAPIAccessToken` that retrieves an OAuth 2.0 access token for authenticating against the Microsoft Graph API.
+
+2. **Fetch Managed Devices Data:**
+   - After obtaining the access token, the script sends a GET request to the Microsoft Graph API (`/beta/deviceManagement/managedDevices`) to retrieve the list of managed devices.
+
+3. **Free Storage Space Check:**
+   - The script iterates through the list of devices. For each device running **Windows**, it checks if the free storage space is less than or equal to 20 GB (21,474,836,480 bytes).
+   - If the device has low disk space, an alert message is created, containing the device name and the amount of free space in gigabytes.
+
+4. **Email Notification Setup:**
+   - If any devices have less than 20 GB of free storage, the script generates an HTML-formatted email body containing the list of affected devices.
+   - The email includes a table with the alerts in a readable format.
+
+5. **Send Email Notification:**
+   - The script sends an email to the helpdesk team (`helpdesk@domain.com`) using an SMTP server (`smtp.azurecomm.net`) if there are alerts.
+   - The email subject is "Device Free Disk Space Alerts", and the body contains the alerts for the devices with low disk space.
+
+6. **Exit:**
+   - The script terminates after either sending the email or determining that no devices meet the low storage criteria.
+
+## **Prerequisites**
+
+- PowerShell 7 or later
+- Microsoft Graph API access and permissions to read device management data
+- SMTP server credentials for sending email notifications
+
+## **Configuration**
+
+1. Replace `helpdesk@domain.com` with the appropriate email address for your helpdesk team.
+2. Update the SMTP server settings (`smtp.azurecomm.net`) and credentials if necessary.
+3. Set up a valid **Automation PS Credential** (`'Credential name'`) for sending emails.
+
+## **Usage Example**
+
+1. **Run the Script:**
+   - Run the script to monitor your devices and send email notifications when storage space is low.
+
+2. **Email Alerts:**
+   - Alerts are sent as an HTML-formatted email with details of devices with free space less than 20 GB.
+
+##NOTES
+Author: Ofir Gavish
+Date: 11/20/2024
+Version: 1.0
+#>
+#Create a function to get Graph API Access token
+function Get-GraphAPIAccessToken {
+    $resource= "?resource=https://graph.microsoft.com/"
+    $url = $env:IDENTITY_ENDPOINT + $resource
+    $Headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
+    $Headers.Add("X-IDENTITY-HEADER", $env:IDENTITY_HEADER)
+    $Headers.Add("Metadata", "True")
+    $accessToken = Invoke-RestMethod -Uri $url -Method 'GET' -Headers $Headers
+    return $accessToken.access_token
+}
+
+# Get access token for Graph API
+$graphApiToken = Get-GraphAPIAccessToken
+
+# Create header for using Graph API
+$graphApiHeader = @{ Authorization = "Bearer $graphApiToken" }
+
+#Got authentication token, running query
+$devicesuri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices"
+$devices = (Invoke-RestMethod -Uri $devicesuri -Headers $graphApiHeader -Method Get).Value
+
+
+$alert = ""
+
+
+foreach ($device in $devices)
+{
+    if ($device.operatingSystem -match "Windows")
+    {
+        if ($device.freeStorageSpaceInBytes -le 21474836480)
+        {
+            $GB = [math]::Round($device.freeStorageSpaceInBytes / 1GB, 3)
+
+            $alert += "Device $($device.deviceName) has less then $GB Gb of free space left" + "<br>"
+        }
+    }
+}
+
+if ($alert){
+#configure variables for email notifications
+$from = "IntuneAlerts@domain.com"
+$to = "helpdesk@domain.com"
+$cred = Get-AutomationPSCredential -Name 'Credential name'
+
+
+$htmlbody = @"
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Email Template</title>
+</head>
+<body>
+<table width="600" align="center" border="0" cellpadding="0" cellspacing="0">
+<tr>
+<td>
+<p style="text-align: center; font-size: 16px; font-weight: 300; line-height: 1.5;">Device Free Disk Space Alerts</p>
+<p style="text-align: center; font-size: 14px; font-weight: 300; line-height: 1.5;">$alert</p>
+</td>
+</tr>
+</body>
+</html>
+"@
+
+
+if ($alert)
+{
+    try {
+        Send-MailMessage -To $to -From $from -Credential $cred -Subject "Device Free Disk Space Alerts" -Body $htmlbody -BodyAsHtml -SmtpServer "smtp.azurecomm.net" -Port 587 -UseSsl
+    }
+    catch {
+        Throw "Failed to send email notification: $_"
+    }
+}
+exit 0
+}
