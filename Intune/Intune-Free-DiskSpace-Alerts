@@ -35,14 +35,14 @@ This PowerShell script monitors the free disk space on Windows devices managed b
 
 ## **Configuration**
 
-1. Update the receipient and sender address with the appropriate email addresses - line 95+96
-2. Update the SMTP server settings (`smtp.azurecomm.net`) and credentials if necessary. - line 123
-3. Update the name of your automation account credential you added (`'Credential name'`) for sending emails. - line 97
+1. Update the recipient and sender address with the appropriate email addresses 
+2. Update the SMTP server settings (`smtp.azurecomm.net`) and credentials if necessary.
+3. Update the name of your automation account credential you added (`'Credential name'`) for sending emails.
 
 ## **Usage Example**
 
 1. **Run the Script:**
-   - Run the script to monitor your devices and send email notifications when storage space is low.
+   - Run the script with an Automation Runbook (on a schedule) to monitor your devices and send email notifications when storage space is low.
 
 2. **Email Alerts:**
    - Alerts are sent as an HTML-formatted email with details of devices with free space less than 20 GB.
@@ -52,6 +52,13 @@ Author: Ofir Gavish
 Date: 11/19/2024
 Version: 1.0
 #>
+
+#Configure variables for email notifications
+$from = "IntuneAlerts@domain.com"
+$to = "helpdesk@domain.com"
+$cred = Get-AutomationPSCredential -Name 'Credential name'
+$smtpserver = "smtp.azurecomm.net"
+
 #Create a function to get Graph API Access token
 function Get-GraphAPIAccessToken {
     $resource= "?resource=https://graph.microsoft.com/"
@@ -91,11 +98,6 @@ foreach ($device in $devices)
 }
 
 if ($alert){
-#configure variables for email notifications
-$from = "IntuneAlerts@domain.com"
-$to = "helpdesk@domain.com"
-$cred = Get-AutomationPSCredential -Name 'Credential name'
-
 
 $htmlbody = @"
 <html>
@@ -120,7 +122,7 @@ $htmlbody = @"
 if ($alert)
 {
     try {
-        Send-MailMessage -To $to -From $from -Credential $cred -Subject "Device Free Disk Space Alerts" -Body $htmlbody -BodyAsHtml -SmtpServer "smtp.azurecomm.net" -Port 587 -UseSsl
+        Send-MailMessage -To $to -From $from -Credential $cred -Subject "Device Free Disk Space Alerts" -Body $htmlbody -BodyAsHtml -SmtpServer $smtpserver -Port 587 -UseSsl
     }
     catch {
         Throw "Failed to send email notification: $_"
