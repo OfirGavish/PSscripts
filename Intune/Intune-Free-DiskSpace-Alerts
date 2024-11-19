@@ -28,15 +28,16 @@ This PowerShell script monitors the free disk space on Windows devices managed b
 
 ## **Prerequisites**
 
-- PowerShell 7 or later
-- Microsoft Graph API access and permissions to read device management data
-- SMTP server credentials for sending email notifications
+- Azure Automation Account with Managed-Identity enabled.
+- Microsoft Graph API access and permissions to read device management data for the Automation account's Managed-Identity
+- SMTP server credentials for sending email notifications 
+   - an app registration name and secret, where the app registration has permissions to the Azure Communication Service the email will be sent from
 
 ## **Configuration**
 
-1. Replace `helpdesk@domain.com` with the appropriate email address for your helpdesk team.
-2. Update the SMTP server settings (`smtp.azurecomm.net`) and credentials if necessary.
-3. Set up a valid **Automation PS Credential** (`'Credential name'`) for sending emails.
+1. Update the receipient and sender address with the appropriate email addresses - line 95+96
+2. Update the SMTP server settings (`smtp.azurecomm.net`) and credentials if necessary. - line 123
+3. Update the name of your automation account credential you added (`'Credential name'`) for sending emails. - line 97
 
 ## **Usage Example**
 
@@ -46,9 +47,9 @@ This PowerShell script monitors the free disk space on Windows devices managed b
 2. **Email Alerts:**
    - Alerts are sent as an HTML-formatted email with details of devices with free space less than 20 GB.
 
-##NOTES
+## **NOTES**
 Author: Ofir Gavish
-Date: 11/20/2024
+Date: 11/19/2024
 Version: 1.0
 #>
 #Create a function to get Graph API Access token
