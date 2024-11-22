@@ -1,0 +1,144 @@
+<policyDefinitions revision="1.0" schemaVersion="1.0"> 
+  <policyNamespaces> 
+    <target prefix="DriveMapping" namespace="DriveMapping.Policies.DriveMapping" /> 
+    <using prefix="windows" namespace="Microsoft.Policies.Windows" /> 
+  </policyNamespaces> 
+  <resources minRequiredRevision="1.0" /> 
+  <categories> 
+    <category name="DriveMapping" displayName="$(string.DriveMapping)" /> 
+  </categories> 
+  <policies>
+     <policy name="ReconnectNetworkDrivesWarning" class="User" displayName="$(string.ReconnectNetworkDrivesWarning)" explainText="$(string.ReconnectNetworkDrivesWarning_Help)" key="Network" valueName="RestoreDiskChecked">
+      <parentCategory ref="DriveMapping" /> 
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+    <policy name="Drive_Q" class="User" displayName="$(string.Drive_Q)" explainText="$(string.Drive_Q_Help)" presentation="$(presentation.Drive_Q)" key="Network\Q"> 
+      <parentCategory ref="DriveMapping" /> 
+      <supportedOn ref="windows:SUPPORTED_Windows7" /> 
+      <enabledList>
+        <item key="Network\Q" valueName="UserName">
+          <value>
+            <string></string>
+          </value>
+        </item>
+        <item key="Network\Q" valueName="ProviderName">
+          <value>
+            <string>Microsoft Windows Network</string>
+          </value>
+        </item>
+        <item key="Network\Q" valueName="ProviderType">
+          <value>
+            <decimal value="8192" />
+          </value>
+        </item>
+        <item key="Network\Q" valueName="ConnectionType">
+          <value>
+            <decimal value="1" />
+          </value>
+        </item>
+        <item key="Network\Q" valueName="DeferFlags">
+          <value>
+            <decimal value="4" />
+          </value>
+        </item>
+      </enabledList>
+      <disabledList>
+        <item key="Network\Q" valueName="RemotePath">
+          <value>
+            <string></string>
+          </value>
+        </item>
+	<item key="Network\Q" valueName="ProviderName">
+          <value>
+            <string></string>
+          </value>
+        </item>
+        <item key="Network\Q" valueName="ProviderType">
+          <value>
+            <decimal value="0" />
+          </value>
+        </item>
+        <item key="Network\Q" valueName="ConnectionType">
+          <value>
+            <decimal value="0" />
+          </value>
+        </item>
+        <item key="Network\Q" valueName="DeferFlags">
+          <value>
+            <decimal value="0" />
+          </value>
+        </item>
+      </disabledList>
+      <elements>
+        <text id="Drive_Q_RemotePath" valueName="RemotePath" expandable="true" />
+      </elements>	  
+    </policy>
+    <policy name="Drive_Z" class="User" displayName="$(string.Drive_Z)" explainText="$(string.Drive_Z_Help)" presentation="$(presentation.Drive_Z)" key="Network\Z"> 
+      <parentCategory ref="DriveMapping" /> 
+      <supportedOn ref="windows:SUPPORTED_Windows7" /> 
+      <enabledList>
+        <item key="Network\Z" valueName="UserName">
+          <value>
+            <string></string>
+          </value>
+        </item>
+        <item key="Network\Z" valueName="ProviderName">
+          <value>
+            <string>Microsoft Windows Network</string>
+          </value>
+        </item>
+        <item key="Network\Z" valueName="ProviderType">
+          <value>
+            <decimal value="8192" />
+          </value>
+        </item>
+        <item key="Network\Z" valueName="ConnectionType">
+          <value>
+            <decimal value="1" />
+          </value>
+        </item>
+        <item key="Network\Z" valueName="DeferFlags">
+          <value>
+            <decimal value="4" />
+          </value>
+        </item>
+      </enabledList>
+     <disabledList>
+        <item key="Network\Z" valueName="RemotePath">
+          <value>
+            <string></string>
+          </value>
+        </item>
+	<item key="Network\Z" valueName="ProviderName">
+          <value>
+            <string></string>
+          </value>
+        </item>
+        <item key="Network\Z" valueName="ProviderType">
+          <value>
+            <decimal value="0" />
+          </value>
+        </item>
+        <item key="Network\Z" valueName="ConnectionType">
+          <value>
+            <decimal value="0" />
+          </value>
+        </item>
+        <item key="Network\Z" valueName="DeferFlags">
+          <value>
+            <decimal value="0" />
+          </value>
+        </item>
+      </disabledList>
+      <elements>
+        <text id="Drive_Z_RemotePath" valueName="RemotePath" expandable="true" />
+      </elements>	  
+    </policy>
+   </policies> 
+</policyDefinitions>
