@@ -81,20 +81,32 @@ $devicesuri = "https://graph.microsoft.com/beta/deviceManagement/managedDevices"
 $devices = (Invoke-RestMethod -Uri $devicesuri -Headers $graphApiHeader -Method Get).Value
 
 
-$alert = ""
 
 
-foreach ($device in $devices)
-{
-    if ($device.operatingSystem -match "Windows")
-    {
-        if ($device.freeStorageSpaceInBytes -le 21474836480)
-        {
+# Create an array to store the alerts
+$alertList = @()
+
+foreach ($device in $devices) {
+    if ($device.operatingSystem -match "Windows") {
+        if ($device.freeStorageSpaceInBytes -le 21474836480) {
             $GB = [math]::Round($device.freeStorageSpaceInBytes / 1GB, 3)
-
-            $alert += "Device $($device.deviceName) has less then $GB Gb of free space left" + "<br>"
+            # Add device alert to the list as an object with properties for sorting
+            $alertList += [PSCustomObject]@{
+                DeviceName = $device.deviceName
+                FreeSpaceGB = $GB
+                FreeSpaceBytes = $device.freeStorageSpaceInBytes
+            }
         }
     }
+}
+
+# Sort the alerts by free space (descending)
+$alertList = $alertList | Sort-Object -Property FreeSpaceBytes
+
+# Build the alert HTML
+$alert = ""
+foreach ($alertItem in $alertList) {
+    $alert += "Device $($alertItem.DeviceName) has less than $($alertItem.FreeSpaceGB) GB of free space left" + "<br>"
 }
 
 if ($alert){
