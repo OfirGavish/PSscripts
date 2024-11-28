@@ -1,7 +1,5 @@
-# Connect to Microsoft Teams and Entra ID using Managed-Identity
+# Connect to Microsoft Teams and Microsoft Graph using Managed-Identity
 Connect-MicrosoftTeams -Identity
-
-# Switch to Microsoft Graph API connection
 Connect-MgGraph -Identity
 
 # Get members of the <GroupName> group using Microsoft Graph
