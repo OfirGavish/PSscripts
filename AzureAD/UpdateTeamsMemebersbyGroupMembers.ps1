@@ -2,7 +2,7 @@
 Connect-MicrosoftTeams -Identity
 
 # Switch to Microsoft Graph API connection
-Connect-MgGraph -Identity -TenantId
+Connect-MgGraph -Identity
 
 # Get members of the <GroupName> group using Microsoft Graph
 try {
