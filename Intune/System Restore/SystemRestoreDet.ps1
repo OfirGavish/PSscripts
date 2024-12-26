@@ -1,11 +1,15 @@
-﻿$logpath = "$env:HomeDrive\ProgramData\Microsoft\IntuneManagementExtension\Logs\SystemRestoreDetection.log"
-if ((Get-ItemProperty -Path $logpath).length/1MB -gt 10)
+if (Get-Module -Name Start-IntuneRemediationTranscript)
 {
-    $a = get-date
-    $b = $a.Day.ToString() + "." + $a.Month.ToString() + "." + $a.Year.ToString()
-    Compress-Archive -Path $logpath -DestinationPath "$logpath.$b.zip"
+    try 
+    {
+        Install-Module -Name Start-IntuneRemediationTranscript
+    } 
+    catch 
+    {
+        Write-Host "Error installing module: $_"
+    }
 }
-Start-Transcript -append $logpath
+Start-IntuneRemediationTranscript -LogName SystemRestoreDetection
 # Check System Restore status using registry keys
 $restoreKey = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore"
 
