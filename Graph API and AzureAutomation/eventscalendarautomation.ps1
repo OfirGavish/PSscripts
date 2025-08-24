@@ -694,6 +694,396 @@ function Test-ExistingCalendarEvent {
 }
 
 ###########################################################################
+# Function to find events to delete for a user
+###########################################################################
+function Find-EventsToDelete {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$UserId,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$Subject,
+        
+        [Parameter(Mandatory=$true)]
+        [datetime]$StartTime,
+        
+        [Parameter(Mandatory=$false)]
+        [string]$TimeZone = "UTC",
+        
+        [Parameter(Mandatory=$false)]
+        [int]$BufferHours = 24
+    )
+
+    # Look for events within a broader time range to catch events that might have slight time differences
+    $SearchStart = $StartTime.AddHours(-$BufferHours).ToString("o") # 'o' = ISO 8601
+    $SearchEnd   = $StartTime.AddHours($BufferHours).ToString("o")
+    
+    Write-Log "Searching for events to delete for user $UserId with subject '$Subject' around time $($StartTime.ToString("yyyy-MM-dd HH:mm:ss"))" -Level "INFO"
+
+    # Re-auth for Graph if needed
+    Assert-GraphAuth
+
+    # Retrieve existing events in that time window
+    try {
+        $ExistingEvents = Invoke-WithRetry -OperationName "Get Calendar View for Deletion" -ScriptBlock {
+            Get-MgUserCalendarView -UserId $UserId `
+                -StartDateTime $SearchStart `
+                -EndDateTime   $SearchEnd `
+                -All -ErrorAction Stop
+        }
+        
+        Write-Log "Found $($ExistingEvents.Count) total events in the search window" -Level "INFO"
+        
+        $EventsToDelete = @()
+        if ($ExistingEvents) {
+            foreach ($Evt in $ExistingEvents) {
+                if ($Evt.Subject -eq $Subject) {
+                    Write-Log "Found matching event for deletion: Subject='$Subject', ID=$($Evt.Id), Start=$($Evt.Start.DateTime)" -Level "INFO"
+                    $EventsToDelete += $Evt
+                }
+            }
+        }
+        
+        Write-Log "Found $($EventsToDelete.Count) events matching deletion criteria" -Level "INFO"
+        return $EventsToDelete
+    }
+    catch {
+        Write-Log "Error searching for events to delete: $($_.Exception.Message)" -Level "WARNING"
+        return @()
+    }
+}
+
+###########################################################################
+# Function to delete a calendar event for a single user
+###########################################################################
+function Remove-CalendarEventForUser {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$UserEmail,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$EventId
+    )
+    
+    try {
+        # Re-auth for Graph if needed
+        Assert-GraphAuth
+
+        # Lookup the user object in Graph
+        Write-Log "Looking up user with email: $UserEmail for event deletion" -Level "INFO"
+        $User = $null
+        try {
+            $User = Invoke-WithRetry -OperationName "Get User by Email for Deletion" -ScriptBlock {
+                Get-MgUser -Filter "Mail eq '$UserEmail' or userPrincipalName eq '$UserEmail'" -ErrorAction Stop
+            }
+            
+            if ($User) {
+                Write-Log "Found user for deletion: $($User.DisplayName) (ID: $($User.Id))" -Level "INFO"
+            }
+            else {
+                Write-Log "User not found with email: $UserEmail for event deletion" -Level "WARNING"
+                return $false
+            }
+        }
+        catch {
+            Write-Log "Error looking up user '$UserEmail' for deletion - $($_.Exception.Message)" -Level "ERROR"
+            return $false
+        }
+
+        # Delete the event
+        try {
+            Write-Log "Deleting event ID: $EventId for user: $UserEmail" -Level "INFO"
+            
+            Invoke-WithRetry -OperationName "Delete Calendar Event" -ScriptBlock {
+                Remove-MgUserEvent -UserId $User.Id -EventId $EventId -ErrorAction Stop
+            }
+            
+            Write-Log "Successfully deleted event ID: $EventId for user: $UserEmail" -Level "INFO"
+            return $true
+        }
+        catch {
+            Write-Log "Error deleting event ID: $EventId for user: $UserEmail - $($_.Exception.Message)" -Level "ERROR"
+            return $false
+        }
+    }
+    catch {
+        Write-Log "Error in Remove-CalendarEventForUser for $UserEmail`: $($_.Exception.Message)" -Level "ERROR"
+        return $false
+    }
+}
+
+###########################################################################
+# Function to delete events for group members or individuals
+###########################################################################
+function Remove-CalendarEventForAllGroupMembers {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$Subject,
+        
+        [Parameter(Mandatory=$true)]
+        [datetime]$StartTime,
+        
+        [Parameter(Mandatory=$true)]
+        [string[]]$AttendeeEmails,
+        
+        [Parameter(Mandatory=$false)]
+        [string]$TimeZone = "UTC"
+    )
+    
+    $TotalDeletions = 0
+    $FailedDeletions = 0
+    
+    try {
+        foreach ($GroupEmail in $AttendeeEmails) {
+            Write-Log "Processing deletion for group or email: $GroupEmail" -Level "INFO"
+            
+            # Check if it's a distribution group first
+            $IsDistributionGroup = $false
+            try {
+                Write-Log "Checking if '$GroupEmail' is a distribution group for deletion" -Level "INFO"
+                $IsDistributionGroup = Test-DistributionGroup -EmailAddress $GroupEmail
+            }
+            catch {
+                Write-Log "Error checking if '$GroupEmail' is a distribution group for deletion: $_" -Level "WARNING"
+                $IsDistributionGroup = $false
+            }
+            
+            if ($IsDistributionGroup) {
+                # Handle distribution group deletion
+                Write-Log "Processing deletion for distribution group: $GroupEmail" -Level "INFO"
+                
+                # Get members of the distribution group
+                $DistGroupMembers = Get-DistributionGroupMembers -GroupEmail $GroupEmail
+                
+                if ($DistGroupMembers -and $DistGroupMembers.Count -gt 0) {
+                    Write-Log "Deleting calendar events for distribution group members..." -Level "INFO"
+                    
+                    foreach ($MemberEmail in $DistGroupMembers) {
+                        try {
+                            if ([string]::IsNullOrWhiteSpace($MemberEmail) -or ($MemberEmail -notmatch "@")) {
+                                Write-Log "✗ Skipping invalid email for deletion: $MemberEmail" -Level "WARNING"
+                                $FailedDeletions++
+                                continue
+                            }
+                            
+                            Write-Log "Processing deletion for distribution group member: $MemberEmail" -Level "INFO"
+                            $DeletedCount = Remove-EventsForUser -UserEmail $MemberEmail -Subject $Subject -StartTime $StartTime -TimeZone $TimeZone
+                            
+                            if ($DeletedCount -gt 0) {
+                                Write-Log "✓ Successfully deleted $DeletedCount event(s) for: $MemberEmail" -Level "INFO"
+                                $TotalDeletions += $DeletedCount
+                            } else {
+                                Write-Log "ℹ No matching events found to delete for: $MemberEmail" -Level "INFO"
+                            }
+                        }
+                        catch {
+                            Write-Log "✗ Error processing deletion for distribution group member $MemberEmail`: $($_.Exception.Message)" -Level "ERROR"
+                            $FailedDeletions++
+                        }
+                    }
+                }
+                else {
+                    Write-Log "No valid members found in distribution group '$GroupEmail' for deletion" -Level "WARNING"
+                }
+            }
+            else {
+                # Re-auth for Graph if needed
+                Assert-GraphAuth
+
+                # Try to find M365 group (same logic as creation, but for deletion)
+                $Group = $null
+                
+                # Method 1: Try direct mail filter
+                try {
+                    Write-Log "Trying to find M365 group by mail for deletion: $GroupEmail" -Level "INFO"
+                    $Group = Invoke-WithRetry -OperationName "Get Group by Mail for Deletion" -ScriptBlock {
+                        Get-MgGroup -Filter "mail eq '$GroupEmail'" -ErrorAction Stop
+                    }
+                    
+                    if ($Group) {
+                        Write-Log "Found M365 group for deletion using mail filter: $($Group.DisplayName)" -Level "INFO"
+                    }
+                }
+                catch {
+                    Write-Log "Get Group by Mail for deletion failed with error: $_. Trying alternate methods." -Level "WARNING"
+                }
+                
+                # Method 2: Try with mailNickname if Method 1 failed
+                if (-not $Group) {
+                    try {
+                        $mailNickname = $GroupEmail.Split('@')[0]
+                        Write-Log "Trying to find M365 group by mailNickname for deletion: $mailNickname" -Level "INFO"
+                        
+                        $Group = Invoke-WithRetry -OperationName "Get Group by MailNickname for Deletion" -ScriptBlock {
+                            Get-MgGroup -Filter "mailNickname eq '$mailNickname'" -ErrorAction Stop
+                        }
+                        
+                        if ($Group) {
+                            Write-Log "Found M365 group for deletion using mailNickname filter: $($Group.DisplayName)" -Level "INFO"
+                        }
+                    }
+                    catch {
+                        Write-Log "Get Group by MailNickname for deletion failed with error: $_" -Level "WARNING"
+                    }
+                }
+                
+                if ($Group) {
+                    # We have an M365 group
+                    Write-Log "Processing deletion for M365 group: $($Group.DisplayName) (ID: $($Group.Id))" -Level "INFO"
+                    
+                    try {
+                        $GroupMembers = Invoke-WithRetry -OperationName "Get Group Members for Deletion" -ScriptBlock {
+                            Get-MgGroupMember -GroupId $Group.Id -All -ErrorAction Stop
+                        }
+                        
+                        if ($GroupMembers) {
+                            Write-Log "Found $($GroupMembers.Count) members in M365 group '$($Group.DisplayName)' for deletion" -Level "INFO"
+                            
+                            foreach ($Member in $GroupMembers) {
+                                try {
+                                    $MemberDetails = Invoke-WithRetry -OperationName "Get Member Details for Deletion" -ScriptBlock {
+                                        Get-MgUser -UserId $Member.Id -Property "Id,DisplayName,Mail,UserPrincipalName,AccountEnabled" -ErrorAction Stop
+                                    }
+                                    
+                                    if ($MemberDetails) {
+                                        $EmailForEvent = if ($MemberDetails.Mail) { $MemberDetails.Mail } else { $MemberDetails.UserPrincipalName }
+                                        $IsValidEmail = ![string]::IsNullOrWhiteSpace($EmailForEvent) -and ($EmailForEvent -match "@")
+                                        
+                                        if ($IsValidEmail) {
+                                            Write-Log "Processing deletion for M365 group member: $EmailForEvent" -Level "INFO"
+                                            $DeletedCount = Remove-EventsForUser -UserEmail $EmailForEvent -Subject $Subject -StartTime $StartTime -TimeZone $TimeZone
+                                            
+                                            if ($DeletedCount -gt 0) {
+                                                Write-Log "✓ Successfully deleted $DeletedCount event(s) for: $EmailForEvent" -Level "INFO"
+                                                $TotalDeletions += $DeletedCount
+                                            } else {
+                                                Write-Log "ℹ No matching events found to delete for: $EmailForEvent" -Level "INFO"
+                                            }
+                                        } else {
+                                            Write-Log "✗ Invalid email for M365 group member deletion: $($MemberDetails.DisplayName)" -Level "WARNING"
+                                            $FailedDeletions++
+                                        }
+                                    }
+                                }
+                                catch {
+                                    Write-Log "✗ Error processing deletion for M365 group member ID $($Member.Id): $($_.Exception.Message)" -Level "ERROR"
+                                    $FailedDeletions++
+                                }
+                            }
+                        }
+                        else {
+                            Write-Log "No members found in M365 group '$($Group.DisplayName)' for deletion" -Level "WARNING"
+                        }
+                    }
+                    catch {
+                        Write-Log "Error retrieving group members for deletion: $($_.Exception.Message)" -Level "ERROR"
+                        $FailedDeletions++
+                    }
+                }
+                else {
+                    # Not a group, treat as individual email
+                    Write-Log "No M365 group found, treating '$GroupEmail' as an individual user for deletion" -Level "INFO"
+                    
+                    $DeletedCount = Remove-EventsForUser -UserEmail $GroupEmail -Subject $Subject -StartTime $StartTime -TimeZone $TimeZone
+                    
+                    if ($DeletedCount -gt 0) {
+                        Write-Log "✓ Successfully deleted $DeletedCount event(s) for individual user: $GroupEmail" -Level "INFO"
+                        $TotalDeletions += $DeletedCount
+                    } else {
+                        Write-Log "ℹ No matching events found to delete for individual user: $GroupEmail" -Level "INFO"
+                    }
+                }
+            }
+        }
+        
+        Write-Log "Deletion summary: $TotalDeletions events deleted successfully, $FailedDeletions failures" -Level "INFO"
+        return @{
+            TotalDeletions = $TotalDeletions
+            FailedDeletions = $FailedDeletions
+        }
+    }
+    catch {
+        Write-Log "Error in Remove-CalendarEventForAllGroupMembers: $_" -Level "ERROR"
+        return @{
+            TotalDeletions = $TotalDeletions
+            FailedDeletions = $FailedDeletions + 1
+        }
+    }
+}
+
+###########################################################################
+# Helper function to delete events for a specific user
+###########################################################################
+function Remove-EventsForUser {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$UserEmail,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$Subject,
+        
+        [Parameter(Mandatory=$true)]
+        [datetime]$StartTime,
+        
+        [Parameter(Mandatory=$false)]
+        [string]$TimeZone = "UTC"
+    )
+    
+    try {
+        # Re-auth for Graph if needed
+        Assert-GraphAuth
+
+        # Lookup the user object in Graph
+        $User = $null
+        try {
+            $User = Invoke-WithRetry -OperationName "Get User by Email for Event Deletion" -ScriptBlock {
+                Get-MgUser -Filter "Mail eq '$UserEmail' or userPrincipalName eq '$UserEmail'" -ErrorAction Stop
+            }
+            
+            if (-not $User) {
+                Write-Log "User not found with email: $UserEmail for event deletion" -Level "WARNING"
+                return 0
+            }
+        }
+        catch {
+            Write-Log "Error looking up user '$UserEmail' for event deletion - $($_.Exception.Message)" -Level "ERROR"
+            return 0
+        }
+
+        # Find events to delete
+        $EventsToDelete = Find-EventsToDelete -UserId $User.Id -Subject $Subject -StartTime $StartTime -TimeZone $TimeZone
+        
+        if ($EventsToDelete.Count -eq 0) {
+            Write-Log "No events found to delete for user: $UserEmail with subject: '$Subject'" -Level "INFO"
+            return 0
+        }
+
+        # Delete each matching event
+        $DeletedCount = 0
+        foreach ($Event in $EventsToDelete) {
+            try {
+                $Success = Remove-CalendarEventForUser -UserEmail $UserEmail -EventId $Event.Id
+                if ($Success) {
+                    $DeletedCount++
+                    Write-Log "Deleted event: '$($Event.Subject)' (ID: $($Event.Id)) for user: $UserEmail" -Level "INFO"
+                } else {
+                    Write-Log "Failed to delete event: '$($Event.Subject)' (ID: $($Event.Id)) for user: $UserEmail" -Level "WARNING"
+                }
+            }
+            catch {
+                Write-Log "Error deleting event '$($Event.Subject)' for user $UserEmail`: $($_.Exception.Message)" -Level "ERROR"
+            }
+        }
+        
+        return $DeletedCount
+    }
+    catch {
+        Write-Log "Error in Remove-EventsForUser for $UserEmail`: $($_.Exception.Message)" -Level "ERROR"
+        return 0
+    }
+}
+
+###########################################################################
 # Function to create a calendar event for a single user
 ###########################################################################
 function New-CalendarEventForUser {
@@ -1738,12 +2128,102 @@ function Test-CalendarEventsVisibility {
 ###########################################################################
 $SuccessCount = 0
 $FailureCount = 0
+$DeletionCount = 0
+$DeletionFailureCount = 0
 
 Write-Log "Starting to process $($EventData.Count) events from Excel"
 
 foreach ($CalEvent in $EventData) {
     try {
-        Write-Log "Processing event: $($CalEvent.Subject)"        # First determine if this is an all-day event
+        Write-Log "Processing event: $($CalEvent.Subject)"
+        
+        # Check if this event is marked for deletion
+        $ShouldDelete = $false
+        if ($CalEvent.PSObject.Properties.Name -contains "Delete") {
+            $DeleteValue = $CalEvent.Delete
+            if (-not [string]::IsNullOrWhiteSpace($DeleteValue)) {
+                # Check for various ways to indicate "Yes" for deletion
+                $DeleteIndicators = @("yes", "y", "true", "1", "delete")
+                $ShouldDelete = $DeleteIndicators -contains $DeleteValue.ToString().ToLower().Trim()
+            }
+        }
+        
+        if ($ShouldDelete) {
+            Write-Log "Event '$($CalEvent.Subject)' is marked for deletion" -Level "INFO"
+            
+            # Parse the dates for deletion (similar to creation logic)
+            try {
+                Write-Log "Processing date/time for deletion of event: $($CalEvent.Subject)" -Level "INFO"
+                Write-Log "Raw StartTime value for deletion: '$($CalEvent.StartTime)'" -Level "INFO"
+                
+                # Handle dates without time components (same logic as creation)
+                if ($CalEvent.StartTime -match '^\d{1,2}/\d{1,2}/\d{4}$' -or $CalEvent.StartTime -match '^\d{4}-\d{1,2}-\d{1,2}$') {
+                    Write-Log "StartTime appears to be date-only format for deletion, setting to midnight" -Level "INFO"
+                    $StartTime = [DateTime]::Parse("$($CalEvent.StartTime) 12:00 AM")
+                } else {
+                    # Parse the full datetime
+                    $StartTime = Get-Date -Date $CalEvent.StartTime -ErrorAction Stop
+                }
+                
+                Write-Log "Parsed StartTime for deletion: $($StartTime.ToString('yyyy-MM-dd HH:mm:ss'))" -Level "INFO"
+            } 
+            catch {
+                Write-Log "Invalid date format in event for deletion '$($CalEvent.Subject)': $_" -Level "ERROR"
+                Write-Log "Failed date value for deletion - StartTime: '$($CalEvent.StartTime)'" -Level "ERROR"
+                $DeletionFailureCount++
+                continue
+            }
+            
+            # Get attendees for deletion
+            if ([string]::IsNullOrWhiteSpace($CalEvent.AttendeeEmails)) {
+                Write-Log "No attendee emails specified for deletion of event: $($CalEvent.Subject)" -Level "WARNING"
+                $DeletionFailureCount++
+                continue
+            }
+            
+            $AttendeeEmails = $CalEvent.AttendeeEmails -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
+            if ($AttendeeEmails.Count -eq 0) {
+                Write-Log "No valid attendee emails found for deletion of event: $($CalEvent.Subject)" -Level "WARNING"
+                $DeletionFailureCount++
+                continue
+            }
+            
+            # Delete the event from attendees' calendars
+            Write-Log "Attempting to delete event '$($CalEvent.Subject)' from attendees' calendars" -Level "INFO"
+            Write-Log "Attendees for deletion: $($AttendeeEmails -join ', ')" -Level "INFO"
+            
+            try {
+                $DeletionResult = Remove-CalendarEventForAllGroupMembers `
+                    -Subject $CalEvent.Subject `
+                    -StartTime $StartTime `
+                    -AttendeeEmails $AttendeeEmails `
+                    -TimeZone "UTC"
+                
+                if ($DeletionResult.TotalDeletions -gt 0) {
+                    Write-Log "Successfully deleted $($DeletionResult.TotalDeletions) instance(s) of event '$($CalEvent.Subject)'" -Level "INFO"
+                    $DeletionCount += $DeletionResult.TotalDeletions
+                } else {
+                    Write-Log "No instances of event '$($CalEvent.Subject)' were found to delete" -Level "INFO"
+                }
+                
+                if ($DeletionResult.FailedDeletions -gt 0) {
+                    Write-Log "Failed to delete event from $($DeletionResult.FailedDeletions) attendee(s)" -Level "WARNING"
+                    $DeletionFailureCount += $DeletionResult.FailedDeletions
+                }
+            }
+            catch {
+                Write-Log "Error during deletion of event '$($CalEvent.Subject)': $_" -Level "ERROR"
+                $DeletionFailureCount++
+            }
+            
+            # Skip to next event (don't create if we're deleting)
+            continue
+        }
+        
+        # If not marked for deletion, proceed with normal event creation
+        Write-Log "Event '$($CalEvent.Subject)' is not marked for deletion, proceeding with creation/update" -Level "INFO"
+
+        # First determine if this is an all-day event
         $IsAllDay = $true  # Default to true (all day event)
         if ($CalEvent.PSObject.Properties.Name -contains "IsAllDay") {
             # Handle empty cells, null values, or whitespace - default to $true
@@ -1935,11 +2415,15 @@ catch {
 ###########################################################################
 Write-Log "Script execution completed"
 Write-Log "Summary: $SuccessCount events processed successfully, $FailureCount events failed"
+Write-Log "Deletion Summary: $DeletionCount events deleted successfully, $DeletionFailureCount deletion failures"
 
-if ($FailureCount -gt 0) {
-    Write-Log "Some events failed to process. Check the log file for details: $LogPath" -Level "WARNING"
+$TotalOperations = $SuccessCount + $FailureCount + $DeletionCount + $DeletionFailureCount
+Write-Log "Total Operations: $TotalOperations (Created: $SuccessCount, Creation Failures: $FailureCount, Deleted: $DeletionCount, Deletion Failures: $DeletionFailureCount)"
+
+if ($FailureCount -gt 0 -or $DeletionFailureCount -gt 0) {
+    Write-Log "Some operations failed to complete. Check the log file for details: $LogPath" -Level "WARNING"
     exit 1
 } else {
-    Write-Log "All events processed successfully"
+    Write-Log "All operations completed successfully"
     exit 0
 }
