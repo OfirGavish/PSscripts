@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Automation Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'azure-blue': '#0078d4',
+                        'azure-dark': '#106ebe',
+                        'success-green': '#107c10',
+                        'warning-orange': '#ff8c00',
+                        'error-red': '#d13438',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Light mode scrollbar (default) - applies to all scrollbars */
+        ::-webkit-scrollbar {
+            width: 14px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9; /* slate-100 */
+            border-radius: 6px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #1e40af; /* blue-800 - dark blue */
+            border-radius: 6px;
+            border: 2px solid #f1f5f9;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #2563eb; /* blue-600 - lighter blue on hover to match dark mode */
+        }
+        
+        /* Dark mode scrollbar - for both document and internal scrollbars */
+        html.dark ::-webkit-scrollbar-track,
+        body.dark ::-webkit-scrollbar-track,
+        .dark ::-webkit-scrollbar-track {
+            background: #1e293b !important; /* slate-800 */
+            border-radius: 6px;
+        }
+        
+        html.dark ::-webkit-scrollbar-thumb,
+        body.dark ::-webkit-scrollbar-thumb,
+        .dark ::-webkit-scrollbar-thumb {
+            background: #1e40af !important; /* blue-800 - dark blue */
+            border: 2px solid #1e293b !important;
+            border-radius: 6px;
+        }
+        
+        html.dark ::-webkit-scrollbar-thumb:hover,
+        body.dark ::-webkit-scrollbar-thumb:hover,
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #2563eb !important; /* blue-600 - lighter blue on hover */
+        }
+        
+        /* Force document scrollbar in dark mode - Firefox support */
+        html.dark,
+        body.dark {
+            scrollbar-width: thin;
+            scrollbar-color: #1e40af #1e293b;
+        }
+        
+        /* Firefox scrollbar */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #1e40af #f1f5f9; /* blue-800 thumb, slate-100 track for light mode */
+        }
+        
+        body.dark *,
+        .dark * {
+            scrollbar-color: #1e40af #1e293b; /* blue-800 thumb, slate-800 track */
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-slate-900 min-h-screen transition-colors duration-300">
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-azure-blue to-azure-dark text-white shadow-lg">
+        <div class="w-full max-w-none px-4 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <i class="fas fa-robot text-4xl"></i>
+                    <div>
+                        <h1 class="text-3xl font-bold">Azure Automation Dashboard</h1>
+                        <p class="text-blue-100">Calendar Event Automation & Monitoring</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="flex items-center space-x-4 text-blue-100">
+                        <button id="darkModeToggle" class="flex items-center space-x-2 hover:text-white transition-colors" title="Toggle Dark Mode">
+                            <i id="darkModeIcon" class="fas fa-moon text-sm"></i>
+                            <span class="text-xs">Dark</span>
+                        </button>
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-clock text-sm"></i>
+                            <span class="text-sm" id="currentTime"></span>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-end space-x-2 mt-1">
+                        <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                        <span class="text-xs">System Online</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <div class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 transition-colors duration-300">
+        <div class="w-full max-w-none px-4 py-8">
+            <div class="text-center">
+                <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-4">Welcome to Your Automation Hub</h2>
+                <p class="text-lg text-gray-600 dark:text-gray-300 mb-8">Monitor, analyze, and manage your Azure Automation workflows from this centralized dashboard. Access real-time logs and system health information.</p>
+                
+                <!-- Quick Stats -->
+                <div class="grid md:grid-cols-4 gap-6" id="quickStats">
+                    <div class="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between">
+                            <div class="text-left">
+                                <p class="text-blue-100 text-sm font-medium">Active Runbooks</p>
+                                <p class="text-2xl font-bold" id="activeRunbooks">-</p>
+                            </div>
+                            <i class="fas fa-play-circle text-3xl text-blue-200"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between">
+                            <div class="text-left">
+                                <p class="text-green-100 text-sm font-medium">Successful Runs</p>
+                                <p class="text-2xl font-bold" id="successfulRuns">-</p>
+                            </div>
+                            <i class="fas fa-check-circle text-3xl text-green-200"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between">
+                            <div class="text-left">
+                                <p class="text-orange-100 text-sm font-medium">Warnings</p>
+                                <p class="text-2xl font-bold" id="warningCount">-</p>
+                            </div>
+                            <i class="fas fa-exclamation-triangle text-3xl text-orange-200"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between">
+                            <div class="text-left">
+                                <p class="text-red-100 text-sm font-medium">Errors</p>
+                                <p class="text-2xl font-bold" id="errorCount">-</p>
+                            </div>
+                            <i class="fas fa-times-circle text-3xl text-red-200"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="w-full px-4 py-8 pb-20 bg-gray-50 dark:bg-slate-900">
+        <div class="grid lg:grid-cols-3 gap-8">
+            <!-- Left Column - Navigation Cards -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Log Viewer Card -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
+                    <div class="bg-gradient-to-r from-azure-blue to-azure-dark p-6">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-eye text-white text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-white">Log Viewer</h3>
+                                <p class="text-blue-100">View and analyze automation logs</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-6">
+                        <p class="text-gray-600 dark:text-gray-300 mb-4">Access detailed logs from your automation runs. Filter by log level, search specific entries, and download logs for offline analysis.</p>
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+                                <span><i class="fas fa-file-alt mr-1"></i>Real-time updates</span>
+                                <span><i class="fas fa-filter mr-1"></i>Advanced filtering</span>
+                                <span><i class="fas fa-download mr-1"></i>Export capability</span>
+                            </div>
+                            <a href="log-analyzer.html" 
+                               class="bg-azure-blue hover:bg-azure-dark text-white px-6 py-2 rounded-lg transition-colors flex items-center">
+                                <span>Open Viewer</span>
+                                <i class="fas fa-arrow-right ml-2"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity Card -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg overflow-hidden transition-colors duration-300">
+                    <div class="p-6 border-b border-gray-200 dark:border-slate-700">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center">
+                                <i class="fas fa-exclamation-triangle mr-2 text-orange-500"></i>
+                                Critical Events & Alerts
+                            </h3>
+                            <button onclick="loadRecentActivity()" 
+                                    class="text-azure-blue hover:text-azure-dark transition-colors">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-6">
+                        <div id="recentActivityList" class="space-y-3">
+                            <!-- Recent activities will be loaded here -->
+                            <div class="text-center text-gray-500 dark:text-gray-400 py-8">
+                                <i class="fas fa-clock text-3xl text-gray-300 dark:text-gray-600 mb-2"></i>
+                                <p>Scanning for critical events...</p>
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-4 border-t border-gray-200">
+                            <a href="log-analyzer.html" 
+                               class="text-azure-blue hover:text-azure-dark text-sm font-medium flex items-center">
+                                View all logs
+                                <i class="fas fa-arrow-right ml-1 text-xs"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column - System Info -->
+            <div class="space-y-6">
+                <!-- Log Storage Status Card (log-only monitoring) -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg overflow-hidden transition-colors duration-300">
+                    <div class="p-6 border-b border-gray-200 dark:border-slate-700">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center">
+                            <i class="fas fa-database mr-2 text-azure-blue"></i>
+                            Log Storage Status
+                        </h3>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-600 dark:text-gray-300">Logs Available</span>
+                            <span class="text-sm font-medium text-gray-900 dark:text-white" id="logsAvailable">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-600 dark:text-gray-300">Latest Log</span>
+                            <span class="text-sm font-medium text-gray-700 dark:text-gray-200" id="latestLog">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-600 dark:text-gray-300">Total Log Files</span>
+                            <span class="text-sm font-medium text-gray-700 dark:text-gray-200" id="totalLogFiles">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-600 dark:text-gray-300">Access</span>
+                            <span class="text-sm font-medium text-gray-700 dark:text-gray-200" id="accessInfo">Storage-restricted</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions Card -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg overflow-hidden transition-colors duration-300">
+                    <div class="p-6 border-b border-gray-200 dark:border-slate-700">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center">
+                            <i class="fas fa-bolt mr-2 text-azure-blue"></i>
+                            Quick Actions
+                        </h3>
+                    </div>
+                    <div class="p-6 space-y-3">
+                        <button onclick="window.location.href='log-analyzer.html'" 
+                                class="w-full bg-azure-blue hover:bg-azure-dark text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center">
+                            <i class="fas fa-eye mr-2"></i>
+                            View Latest Logs
+                        </button>
+                        <button onclick="downloadLatestLog()" 
+                                class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center">
+                            <i class="fas fa-download mr-2"></i>
+                            Download Latest Log
+                        </button>
+                        <button onclick="refreshDashboard()" 
+                                class="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center">
+                            <i class="fas fa-sync-alt mr-2"></i>
+                            Refresh Dashboard
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Info Card -->
+                <div class="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 rounded-xl shadow-lg overflow-hidden border border-blue-200 dark:border-gray-700">
+                    <div class="p-6">
+                        <div class="flex items-start space-x-3">
+                            <div class="w-10 h-10 bg-blue-500 dark:bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-info text-white"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-blue-900 dark:text-blue-300 mb-2">About This Dashboard</h4>
+                                <p class="text-sm text-blue-700 dark:text-gray-300 leading-relaxed">
+                                    This dashboard analyzes log files that your runbooks write into the storage account. It does not
+                                    connect to or monitor the Automation Account service directly. Upload log files to the <code>/logs/</code>
+                                    folder and the dashboard will surface errors, warnings and success messages from recent runs.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 dark:bg-slate-950 text-gray-300 dark:text-slate-400 py-8 transition-colors duration-300">
+        <div class="w-full max-w-none px-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-shield-alt text-azure-blue"></i>
+                    <span class="text-sm">Secured by Azure</span>
+                </div>
+                <div class="text-sm">
+                    <span>Last updated: <span id="lastUpdated">-</span></span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        class AzureDashboard {
+            constructor() {
+                this.storageAccount = this.extractStorageAccountFromUrl();
+                this.containerName = 'automation-logs';
+                this.init();
+            }
+
+            init() {
+                console.log('Dashboard initializing...');
+                this.updateCurrentTime();
+                this.updateLastUpdated();
+                this.loadQuickStats();
+                this.loadRecentActivity().catch(error => {
+                    console.error('Failed to load recent activity during init:', error);
+                });
+                
+                // Update time every minute
+                setInterval(() => this.updateCurrentTime(), 60000);
+            }
+
+            extractStorageAccountFromUrl() {
+                const hostname = window.location.hostname;
+                if (hostname.includes('.blob.core.windows.net')) {
+                    return hostname.split('.')[0];
+                }
+                return null;
+            }
+
+            updateCurrentTime() {
+                const now = new Date();
+                document.getElementById('currentTime').textContent = 
+                    now.toLocaleString('en-US', { 
+                        weekday: 'short', 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric', 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    });
+            }
+
+            updateLastUpdated() {
+                document.getElementById('lastUpdated').textContent = new Date().toLocaleString();
+            }
+
+            async loadQuickStats() {
+                // Always try to load real stats from log files, regardless of storage account detection
+                try {
+                    const stats = await this.fetchLogStats();
+                    this.updateQuickStats(stats);
+                } catch (error) {
+                    console.error('Failed to load stats:', error);
+                    this.setPlaceholderStats();
+                }
+            }
+
+            async fetchLogStats() {
+                // Try to get stats from actual log files
+                const logFiles = await this.discoverLogFiles();
+                
+                if (logFiles.length === 0) {
+                    return {
+                        totalFiles: 0,
+                        errors: 0,
+                        warnings: 0,
+                        successCount: 0,
+                        lastModified: new Date()
+                    };
+                }
+
+                // Analyze the most recent log files (up to 3 latest)
+                const recentFiles = logFiles.slice(0, 3);
+                let totalErrors = 0;
+                let totalWarnings = 0;
+                let totalSuccess = 0;
+                let lastModified = logFiles[0].lastModified;
+
+                for (const file of recentFiles) {
+                    try {
+                        const logContent = await this.fetchLogContent(file.path);
+                        const analysis = this.analyzeLogContent(logContent);
+                        totalErrors += analysis.errors;
+                        totalWarnings += analysis.warnings;
+                        totalSuccess += analysis.success;
+                    } catch (error) {
+                        console.warn(`Failed to analyze ${file.name}:`, error);
+                    }
+                }
+
+                return {
+                    totalFiles: logFiles.length,
+                    errors: totalErrors,
+                    warnings: totalWarnings,
+                    successCount: totalSuccess,
+                    lastModified: lastModified
+                };
+            }
+
+            updateQuickStats(stats) {
+                document.getElementById('activeRunbooks').textContent = '1';
+                document.getElementById('successfulRuns').textContent = stats.successCount || '0';
+                document.getElementById('warningCount').textContent = stats.warnings || '0';
+                document.getElementById('errorCount').textContent = stats.errors || '0';
+                // Update log storage status card
+                this.updateLogStatus(stats);
+            }
+
+            setPlaceholderStats() {
+                document.getElementById('activeRunbooks').textContent = '1';
+                document.getElementById('successfulRuns').textContent = '✓';
+                document.getElementById('warningCount').textContent = '0';
+                document.getElementById('errorCount').textContent = '0';
+            }
+
+            async loadRecentActivity() {
+                console.log('Loading recent activity...');
+                const container = document.getElementById('recentActivityList');
+                
+                if (!container) {
+                    console.error('recentActivityList container not found!');
+                    return;
+                }
+                
+                // Always try to load real activity from log files
+                try {
+                    console.log('Fetching recent activity...');
+                    const activities = await this.fetchRecentActivity();
+                    console.log('Found activities:', activities);
+                    container.innerHTML = this.renderRecentActivity(activities);
+                } catch (error) {
+                    console.error('Failed to load recent activity:', error);
+                    container.innerHTML = this.getPlaceholderActivity();
+                }
+            }
+
+            async fetchRecentActivity() {
+                console.log('Discovering log files...');
+                const logFiles = await this.discoverLogFiles();
+                console.log('Discovered log files:', logFiles);
+                const activities = [];
+                
+                // Get the most recent log file and extract recent entries
+                if (logFiles.length > 0) {
+                    try {
+                        const latestLog = logFiles[0];
+                        console.log('📋 Processing latest log file:', latestLog.name, 'Size:', latestLog.size, 'Modified:', latestLog.lastModified);
+                        const content = await this.fetchLogContent(latestLog.path);
+                        console.log('📄 Log file content length:', content.length, 'characters');
+                        const lines = content.split('\n').filter(line => line.trim());
+                        
+                        // Get critical events only - errors, warnings, and important automation events
+                        const recentEntries = lines
+                            .slice(-100) // Look at more lines to find critical events
+                            .filter(line => {
+                                const upperLine = line.toUpperCase();
+                                // Enhanced critical event detection based on your actual log patterns
+                                return upperLine.includes('[') && (
+                                    // Standard error patterns
+                                    upperLine.includes('[ERROR]') || 
+                                    upperLine.includes('[WARNING]') || 
+                                    upperLine.includes('ERROR:') ||
+                                    upperLine.includes('WARNING:') ||
+                                    upperLine.includes('FAILED') ||
+                                    upperLine.includes('EXCEPTION') ||
+                                    
+                                    // Your specific automation error patterns
+                                    upperLine.includes('FAILED AFTER') && upperLine.includes('RETRIES') ||
+                                    upperLine.includes('COULDN\'T BE FOUND') ||
+                                    upperLine.includes('REQUEST_UNSUPPORTEDQUERY') ||
+                                    upperLine.includes('RETRY ATTEMPT') ||
+                                    upperLine.includes('RETRYING...') ||
+                                    upperLine.includes('INVALID SHOWAS VALUE') ||
+                                    upperLine.includes('PERMISSIONS MIGHT BE MISSING') ||
+                                    upperLine.includes('NO STARTTIME') ||
+                                    upperLine.includes('MANUAL REVIEW') ||
+                                    
+                                    // Distribution group and Graph API specific errors
+                                    upperLine.includes('DISTRIBUTION GROUP') && upperLine.includes('FAILED') ||
+                                    upperLine.includes('GET GROUP BY') && upperLine.includes('FAILED') ||
+                                    upperLine.includes('INVALID EXPRESSION') ||
+                                    upperLine.includes('STATUS: 400') ||
+                                    upperLine.includes('STATUS: 404') ||
+                                    
+                                    // Network and connection issues
+                                    upperLine.includes('TIMEOUT') ||
+                                    upperLine.includes('UNAUTHORIZED') ||
+                                    upperLine.includes('FORBIDDEN') ||
+                                    upperLine.includes('SERVICE UNAVAILABLE') ||
+                                    upperLine.includes('CONNECTION') && upperLine.includes('FAILED') ||
+                                    
+                                    // Authentication and API issues
+                                    upperLine.includes('AUTHENTICATION') && upperLine.includes('FAILED') ||
+                                    upperLine.includes('GRAPH API') && (upperLine.includes('ERROR') || upperLine.includes('FAILED')) ||
+                                    upperLine.includes('EXCHANGE ONLINE') && (upperLine.includes('ERROR') || upperLine.includes('FAILED')) ||
+                                    upperLine.includes('TOKEN') && (upperLine.includes('EXPIRED') || upperLine.includes('INVALID')) ||
+                                    
+                                    // Success patterns (fewer, more selective)
+                                    (upperLine.includes('[INFO]') && (
+                                        upperLine.includes('CONNECTED TO MICROSOFT GRAPH') ||
+                                        upperLine.includes('CONNECTED TO EXCHANGE ONLINE') ||
+                                        upperLine.includes('EXCEL DATA IMPORTED SUCCESSFULLY') ||
+                                        upperLine.includes('EVENTS FOUND') ||
+                                        upperLine.includes('PROCESSING COMPLETED')
+                                    ))
+                                );
+                            })
+                            .slice(-12); // Keep last 12 critical events for better visibility
+                        
+                        for (const entry of recentEntries) {
+                            const parsed = this.parseLogEntry(entry);
+                            if (parsed) {
+                                activities.push({
+                                    message: parsed.message,
+                                    level: parsed.level,
+                                    timestamp: parsed.timestamp,
+                                    fileName: latestLog.name
+                                });
+                            }
+                        }
+                    } catch (error) {
+                        console.warn('Failed to fetch recent activity:', error);
+                    }
+                }
+                
+                return activities.reverse(); // Show newest first
+            }
+
+            renderRecentActivity(activities) {
+                if (activities.length === 0) {
+                    return `
+                        <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
+                            <div class="text-center text-gray-500 dark:text-gray-400 py-8">
+                                <i class="fas fa-check-circle text-green-500 text-3xl mb-3 block"></i>
+                                <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">No Critical Events Detected</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Your automation is running smoothly!</p>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Count different types of issues for insights
+                const errorCount = activities.filter(a => a.level.toUpperCase().includes('ERROR')).length;
+                const warningCount = activities.filter(a => a.level.toUpperCase().includes('WARNING')).length;
+                const userFallbackCount = this.lastAnalysisDetails?.userFallbacks || 0;
+                
+                // Generate insights header if there are issues or positive patterns
+                let insightsHeader = '';
+                if (errorCount > 0 || warningCount > 0 || userFallbackCount > 0) {
+                    insightsHeader = `
+                        <div class="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                            <div class="flex items-center space-x-2 mb-2">
+                                <i class="fas fa-exclamation-triangle text-yellow-600 dark:text-yellow-400"></i>
+                                <span class="font-semibold text-yellow-800 dark:text-yellow-200">Issues Detected</span>
+                            </div>
+                            <div class="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
+                                ${errorCount > 0 ? `<p>• <strong>${errorCount} Error(s):</strong> Distribution group lookup failures, Graph API query issues</p>` : ''}
+                                ${warningCount > 0 ? `<p>• <strong>${warningCount} Warning(s):</strong> Missing permissions, retry attempts, invalid data</p>` : ''}
+                                ${userFallbackCount > 0 ? `<p>• <span class="text-green-600 dark:text-green-400">✅ <strong>${userFallbackCount} User Email(s) Processed Successfully:</strong> Distribution group lookups that correctly fell back to individual user processing</span></p>` : ''}
+                                <p class="mt-2 text-xs">
+                                    <strong>Recommendations:</strong> 
+                                    ${errorCount > 0 ? 'Review Exchange Online permissions and email addresses. ' : ''}
+                                    ${warningCount > 0 ? 'Check Graph API permissions (Files.Read) and event data quality. ' : ''}
+                                    ${userFallbackCount > 0 ? 'User fallback processing is working correctly - these are not errors. ' : ''}
+                                    <a href="log-analyzer.html" class="text-yellow-800 dark:text-yellow-200 underline">View detailed logs</a>
+                                </p>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Create scrollable table for activities
+                const activitiesTable = `
+                    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
+                        <div class="overflow-x-auto overflow-y-auto max-h-96">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 dark:bg-gray-900 sticky top-0 z-10">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[60px]">
+                                            Level
+                                        </th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[140px]">
+                                            Timestamp
+                                        </th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                            Message
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                    ${activities.map(activity => {
+                                        const iconClass = this.getActivityIcon(activity.level);
+                                        const colorClass = this.getActivityColor(activity.level);
+                                        
+                                        return `
+                                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                                                <td class="px-4 py-3 whitespace-nowrap">
+                                                    <div class="flex items-center space-x-2">
+                                                        <div class="w-6 h-6 ${colorClass.bg} rounded-full flex items-center justify-center flex-shrink-0">
+                                                            <i class="${iconClass} ${colorClass.text} text-xs"></i>
+                                                        </div>
+                                                        <span class="text-xs ${colorClass.text} font-medium">${activity.level}</span>
+                                                    </div>
+                                                </td>
+                                                <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                                                    ${activity.timestamp.toLocaleString('en-US', { 
+                                                        month: 'short', 
+                                                        day: 'numeric', 
+                                                        hour: '2-digit', 
+                                                        minute: '2-digit',
+                                                        hour12: false
+                                                    })}
+                                                </td>
+                                                <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                                                    <div class="max-w-2xl">
+                                                        <p class="break-words">${this.escapeHtml(activity.message)}</p>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+                
+                return insightsHeader + activitiesTable;
+            }
+
+            getPlaceholderActivity() {
+                return `
+                    <div class="flex items-center justify-between py-2 border-b border-gray-100">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                <i class="fas fa-check text-green-600 text-xs"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-gray-900">Calendar Event Automation</p>
+                                <p class="text-xs text-gray-500">System running normally</p>
+                            </div>
+                        </div>
+                        <span class="text-xs text-green-600">Active</span>
+                    </div>
+                `;
+            }
+
+            formatFileSize(bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+            }
+
+            updateLogStatus(stats) {
+                // Populate the Log Storage Status card with analyzed data
+                document.getElementById('totalLogFiles').textContent = stats.totalFiles || '0';
+                document.getElementById('logsAvailable').textContent = (stats.totalFiles && stats.totalFiles > 0) ? 'Yes' : 'No';
+                document.getElementById('latestLog').textContent = stats.lastModified ? new Date(stats.lastModified).toLocaleString() : '-';
+                // accessInfo remains static unless you want to detect CORS / anonymous access
+            }
+
+            async discoverLogFiles() {
+                console.log('🔍 Starting log file discovery...');
+                console.log('Current URL:', window.location.href);
+                console.log('Current hostname:', window.location.hostname);
+                
+                // Try Azure Storage REST API first (when deployed to storage account)
+                try {
+                    console.log('🌐 Attempting Azure Storage API discovery...');
+                    const azureFiles = await this.listBlobsFromAzureStorage();
+                    console.log('✅ Azure Storage API returned', azureFiles.length, 'files:', azureFiles.map(f => f.name));
+                    if (azureFiles.length > 0) {
+                        return azureFiles.sort((a, b) => b.lastModified - a.lastModified);
+                    } else {
+                        console.log('⚠️ Azure Storage API returned 0 files, falling back to local discovery...');
+                    }
+                } catch (error) {
+                    console.log('❌ Azure Storage API failed:', error.message);
+                    console.log('🔄 Falling back to local discovery...');
+                }
+
+                // Fallback to targeted discovery for local testing
+                const localFiles = await this.discoverLogFilesLocal();
+                console.log('📁 Local discovery returned', localFiles.length, 'files:', localFiles.map(f => f.name));
+                return localFiles;
+            }
+
+            async probeForLogFiles() {
+                const logFiles = [];
+                const baseUrl = `${window.location.origin}/logs/`;
+                
+                // Common log file patterns to probe
+                const currentDate = new Date();
+                const dateStr = currentDate.toISOString().split('T')[0].replace(/-/g, '');
+                
+                // Build targeted probe list (only current files)
+                const probePathsRaw = [
+                    // Essential automation logs (likely to exist)
+                    'latest.log',
+                    'automation.log',
+                    
+                    // Today's logs only (Sep 24, 2025)
+                    'CalendarEventCreation_20250924.log',
+                    'calendar-automation-log-20250924-080025.log',
+                    'calendar-automation-log-20250924-123725.log',  
+                    'calendar-automation-log-20250924-130223.log', // Another time variant
+                    'mock-events-20250924.log',
+                    
+                    // Current day pattern (if different from hardcoded)
+                    `calendar-automation-log-${dateStr}.log`,
+                    `CalendarEventCreation_${dateStr}.log`,
+                    `automation-${dateStr}.log`,
+                    
+                    // Common variations for current day
+                    `calendar-automation-log-${dateStr}-080025.log`,
+                    `calendar-automation-log-${dateStr}-123725.log`,
+                    `calendar-automation-log-${dateStr}-130223.log`,
+                    `mock-events-${dateStr}.log`,
+                    
+                    // Add the actual name of your 7th log file here when identified
+                    // 'your-missing-file.log'
+                ];
+                
+                // Remove duplicates to avoid redundant requests
+                const probePaths = [...new Set(probePathsRaw)];
+                
+                console.log('🔍 Optimized probing for', probePaths.length, 'unique log files (reduced from', probePathsRaw.length, 'potential files)...');
+                console.log('🎯 Checking files:', probePaths);
+                
+                // Probe files in parallel (but limit concurrency)
+                const batchSize = 5;
+                for (let i = 0; i < probePaths.length; i += batchSize) {
+                    const batch = probePaths.slice(i, i + batchSize);
+                    const promises = batch.map(async (fileName) => {
+                        try {
+                            const url = baseUrl + fileName;
+                            const response = await fetch(url, { method: 'HEAD' });
+                            if (response.ok) {
+                                const size = response.headers.get('content-length') || 'Unknown';
+                                const lastModified = response.headers.get('last-modified');
+                                console.log('✅ Found log file:', fileName, `(${size} bytes)`);
+                                return {
+                                    name: fileName,
+                                    path: url,
+                                    url: url,
+                                    size: parseInt(size) || 0,
+                                    lastModified: lastModified ? new Date(lastModified) : new Date()
+                                };
+                            }
+                        } catch (error) {
+                            // File doesn't exist or other error - ignore
+                        }
+                        return null;
+                    });
+                    
+                    const results = await Promise.all(promises);
+                    logFiles.push(...results.filter(f => f !== null));
+                }
+                
+                // Sort by last modified (newest first)
+                logFiles.sort((a, b) => b.lastModified - a.lastModified);
+                
+                console.log('📋 Smart probing found', logFiles.length, 'accessible log files');
+                return logFiles;
+            }
+
+            async listBlobsFromAzureStorage() {
+                const logFiles = [];
+                
+                try {
+                    // Get the current hostname
+                    const hostname = window.location.hostname;
+                    
+                    // Extract storage account name from hostname (format: accountname.z6.web.core.windows.net)
+                    const storageAccountMatch = hostname.match(/^([^.]+)\.z\d+\.web\.core\.windows\.net$/);
+                    if (!storageAccountMatch) {
+                        throw new Error('Not running on Azure Storage static website');
+                    }
+                    
+                    const storageAccountName = storageAccountMatch[1];
+                    // Correct Azure Storage REST API endpoint for listing blobs with prefix
+                    const storageApiUrl = `https://${storageAccountName}.blob.core.windows.net/$web?restype=container&comp=list&prefix=logs/`;
+                    
+                    console.log('🌐 Trying Azure Storage REST API:', storageApiUrl);
+                    const response = await fetch(storageApiUrl);
+                    
+                    if (!response.ok) {
+                        console.log('❌ Azure Storage REST API failed:', response.status, response.statusText);
+                        console.log('🔄 Falling back to smart probing...');
+                        
+                        // Fallback to probing only as last resort
+                        const probedFiles = await this.probeForLogFiles();
+                        if (probedFiles.length > 0) {
+                            console.log('✅ Found', probedFiles.length, 'log files via smart probing fallback');
+                            return probedFiles;
+                        }
+                        throw new Error(`Azure Storage REST API not accessible: ${response.status}`);
+                    }
+                    
+                    const xmlText = await response.text();
+                    console.log('📄 Azure Storage API XML response length:', xmlText.length);
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+                    
+                    // Parse the XML response for blob information
+                    const blobs = xmlDoc.querySelectorAll('Blob');
+                    console.log('📦 Found', blobs.length, 'blob(s) in Azure Storage API response');
+                    
+                    for (const blob of blobs) {
+                        const nameElement = blob.querySelector('Name');
+                        const propertiesElement = blob.querySelector('Properties');
+                        
+                        if (nameElement && propertiesElement) {
+                            const fullName = nameElement.textContent;
+                            const fileName = fullName.replace('logs/', '');
+                            
+                            console.log('🔍 Found blob:', fullName, 'File name:', fileName);
+                            
+                            // Only include .log files
+                            if (fileName.endsWith('.log')) {
+                                console.log('✅ Including .log file:', fileName);
+                                const lastModifiedElement = propertiesElement.querySelector('Last-Modified');
+                                const contentLengthElement = propertiesElement.querySelector('Content-Length');
+                                
+                                const lastModified = lastModifiedElement ? 
+                                    new Date(lastModifiedElement.textContent) : 
+                                    new Date();
+                                const size = contentLengthElement ? 
+                                    parseInt(contentLengthElement.textContent) : 
+                                    0;
+                                
+                                logFiles.push({
+                                    name: fileName,
+                                    path: `${window.location.origin}/logs/${fileName}`,
+                                    url: `${window.location.origin}/logs/${fileName}`,
+                                    size: size,
+                                    lastModified: lastModified
+                                });
+                            }
+                        }
+                    }
+                    
+                    console.log('🎉 Azure Storage API found', logFiles.length, 'log files total');
+                    return logFiles;
+                    
+                } catch (error) {
+                    console.log('Error accessing Azure Storage API:', error);
+                    throw error;
+                }
+            
+            }
+
+            async discoverLogFilesLocal() {
+                const logFiles = [];
+                const today = new Date();
+                const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
+                
+                // For local testing, only check today's files and known static files
+                const targetFiles = [
+                    // Today's pattern files
+                    `CalendarEventCreation_${dateStr}.log`,
+                    `automation_${dateStr}.log`,
+                    `script_${dateStr}.log`,
+                    `calendar-automation-log-${dateStr}-080025.log`,
+                    // Your specific automation log files
+                    'calendar-automation-log-20250924-123725.log',
+                    'calendar-automation-log-20250924-130223.log',
+                    // Static files that are commonly present
+                    'automation.log',
+                    'latest.log',
+                    // Mock file for testing
+                    'mock-events-20250924.log'
+                    // Add the actual name of your 7th log file here when identified
+                ];
+                
+                const foundFiles = new Set(); // Track found files to avoid duplicates
+                
+                for (const filename of targetFiles) {
+                    try {
+                        // Skip if we've already found this file
+                        if (foundFiles.has(filename)) {
+                            continue;
+                        }
+                        
+                        // Use HEAD first for efficiency
+                        let response = await fetch(`/logs/${filename}`, { method: 'HEAD' });
+                        
+                        if (!response.ok) {
+                            // Fallback to GET for compatibility
+                            response = await fetch(`/logs/${filename}`, { method: 'GET' });
+                        }
+                        
+                        if (response.ok) {
+                            const lastModified = new Date(response.headers.get('Last-Modified') || Date.now());
+                            const size = parseInt(response.headers.get('Content-Length') || '0');
+                            
+                            logFiles.push({
+                                name: filename,
+                                path: `/logs/${filename}`,
+                                lastModified,
+                                size
+                            });
+                            
+                            foundFiles.add(filename); // Mark as found
+                        }
+                    } catch (error) {
+                        // File doesn't exist, continue silently
+                    }
+                }
+                
+                return logFiles;
+            }
+
+            async fetchLogContent(filePath) {
+                const response = await fetch(filePath);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return await response.text();
+            }
+
+            identifySuccessfulUserFallbacks(logs) {
+                const userFallbackEmails = new Set();
+                
+                // Look for distribution group failure followed by user success patterns
+                for (let i = 0; i < logs.length; i++) {
+                    const currentLog = logs[i];
+                    
+                    // Check if this is a distribution group failure
+                    if (/get.*distribution.*group.*failed|distribution.*group.*not.*found|couldn't.*find.*distribution.*group/i.test(currentLog)) {
+                        // Extract email from the error message
+                        const emailMatch = currentLog.match(/([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i);
+                        if (emailMatch) {
+                            const email = emailMatch[1];
+                            
+                            // Look ahead for user success indicators within next 15 log entries
+                            for (let j = i + 1; j < Math.min(i + 15, logs.length); j++) {
+                                const futureLog = logs[j];
+                                if (futureLog.includes(email) && 
+                                    (/treating.*as.*individual.*user|no.*m365.*group.*found.*treating|processing.*as.*user|fallback.*to.*user/i.test(futureLog) ||
+                                     /user.*email.*processed|individual.*user.*successful|user.*attendee.*added/i.test(futureLog))) {
+                                    userFallbackEmails.add(email);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                return userFallbackEmails;
+            }
+
+            analyzeLogContent(content) {
+                const lines = content.split('\n').filter(line => line.trim());
+                let errors = 0;
+                let warnings = 0;
+                let success = 0;
+                
+                // Identify successful user fallbacks first
+                const userFallbackEmails = this.identifySuccessfulUserFallbacks(lines);
+                
+                // Specific error patterns from your automation logs
+                const errorPatterns = [];
+                const warningPatterns = [];
+                const successPatterns = [];
+
+                for (const line of lines) {
+                    const upperLine = line.toUpperCase();
+                    
+                    // Enhanced error detection patterns
+                    if (upperLine.includes('[ERROR]') || 
+                        upperLine.includes('ERROR:') || 
+                        upperLine.includes('FAILED AFTER') ||
+                        upperLine.includes('FAILED WITH ERROR:') ||
+                        upperLine.includes('REQUEST_UNSUPPORTEDQUERY') ||
+                        upperLine.includes('OPERATION COULDN\'T BE PERFORMED') ||
+                        upperLine.includes('STATUS: 400') ||
+                        upperLine.includes('STATUS: 404') ||
+                        upperLine.includes('STATUS: 500')) {
+                        errors++;
+                        // Extract specific error details
+                        if (line.includes('Get Distribution Group failed after')) {
+                            // Check if this is actually a successful user fallback
+                            const emailMatch = line.match(/([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i);
+                            if (!emailMatch || !userFallbackEmails.has(emailMatch[1])) {
+                                errorPatterns.push('Distribution Group lookup failures');
+                            } else {
+                                // This is a successful user fallback, don't count as error
+                                errors--; // Subtract the error we just added
+                            }
+                        }
+                        if (line.includes('Request_UnsupportedQuery')) {
+                            errorPatterns.push('Microsoft Graph API query syntax errors');
+                        }
+                        if (line.includes('object') && line.includes('couldn\'t be found')) {
+                            errorPatterns.push('Object not found in Exchange Online');
+                        }
+                    } 
+                    // Enhanced warning detection patterns
+                    else if (upperLine.includes('[WARNING]') || 
+                             upperLine.includes('WARNING:') || 
+                             upperLine.includes('WARN:') ||
+                             upperLine.includes('RETRY ATTEMPT') ||
+                             upperLine.includes('RETRYING...') ||
+                             upperLine.includes('MIGHT AFFECT') ||
+                             upperLine.includes('INVALID SHOWAS VALUE') ||
+                             upperLine.includes('PERMISSIONS MIGHT BE MISSING') ||
+                             upperLine.includes('KEEPING IT FOR MANUAL REVIEW')) {
+                        warnings++;
+                        // Extract specific warning details
+                        if (line.includes('permissions might be missing')) {
+                            warningPatterns.push('Missing Graph API permissions (Files.Read)');
+                        }
+                        if (line.includes('Invalid ShowAs value')) {
+                            warningPatterns.push('Invalid calendar event ShowAs values');
+                        }
+                        if (line.includes('no StartTime')) {
+                            warningPatterns.push('Events with missing StartTime data');
+                        }
+                        if (line.includes('Retry attempt')) {
+                            warningPatterns.push('API retry attempts (network/service issues)');
+                        }
+                    } 
+                    // Enhanced success detection patterns
+                    else if (upperLine.includes('[SUCCESS]') || 
+                             upperLine.includes('SUCCESS:') || 
+                             upperLine.includes('COMPLETED') || 
+                             upperLine.includes('SUCCESSFUL') ||
+                             upperLine.includes('✓') ||
+                             upperLine.includes('CONNECTED TO MICROSOFT GRAPH') ||
+                             upperLine.includes('CONNECTED TO EXCHANGE ONLINE') ||
+                             upperLine.includes('FILE DOWNLOADED SUCCESSFULLY') ||
+                             upperLine.includes('EXCEL DATA IMPORTED SUCCESSFULLY')) {
+                        success++;
+                        // Extract specific success details
+                        if (line.includes('Connected to Microsoft Graph')) {
+                            successPatterns.push('Microsoft Graph API authentication');
+                        }
+                        if (line.includes('Connected to Exchange Online')) {
+                            successPatterns.push('Exchange Online authentication');
+                        }
+                        if (line.includes('Excel data imported successfully')) {
+                            successPatterns.push('SharePoint Excel file processing');
+                        }
+                    }
+                    // Check for successful user fallback patterns
+                    else if (/treating.*as.*individual.*user|no.*m365.*group.*found.*treating/i.test(line)) {
+                        const emailMatch = line.match(/([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i);
+                        if (emailMatch && userFallbackEmails.has(emailMatch[1])) {
+                            success++;
+                            successPatterns.push('Individual user email processing (expected behavior)');
+                        }
+                    }
+                }
+                
+                // Store detailed patterns for insights
+                this.lastAnalysisDetails = {
+                    errorPatterns: [...new Set(errorPatterns)],
+                    warningPatterns: [...new Set(warningPatterns)],
+                    successPatterns: [...new Set(successPatterns)],
+                    userFallbacks: userFallbackEmails.size
+                };
+
+                return { errors, warnings, success };
+            }
+
+            parseLogEntry(line) {
+                // Parse log format: [timestamp] [level] message
+                const match = line.match(/^\[(.*?)\]\s*\[(.*?)\]\s*(.*)$/);
+                
+                if (match) {
+                    return {
+                        timestamp: new Date(match[1]),
+                        level: match[2].toUpperCase(),
+                        message: match[3].trim()
+                    };
+                }
+                
+                // Fallback for lines without proper format
+                const upperLine = line.toUpperCase();
+                let level = 'INFO';
+                if (upperLine.includes('ERROR') || upperLine.includes('FAILED')) {
+                    level = 'ERROR';
+                } else if (upperLine.includes('WARNING') || upperLine.includes('WARN')) {
+                    level = 'WARNING';
+                } else if (upperLine.includes('SUCCESS') || upperLine.includes('COMPLETED')) {
+                    level = 'SUCCESS';
+                }
+                
+                return {
+                    timestamp: new Date(),
+                    level: level,
+                    message: line.trim()
+                };
+            }
+
+            getActivityIcon(level) {
+                const icons = {
+                    'ERROR': 'fas fa-times',
+                    'WARNING': 'fas fa-exclamation-triangle',
+                    'SUCCESS': 'fas fa-check',
+                    'INFO': 'fas fa-info',
+                    'DEBUG': 'fas fa-bug'
+                };
+                return icons[level] || 'fas fa-info';
+            }
+
+            getActivityColor(level) {
+                const colors = {
+                    'ERROR': {
+                        bg: 'bg-red-100',
+                        text: 'text-red-600'
+                    },
+                    'WARNING': {
+                        bg: 'bg-orange-100',
+                        text: 'text-orange-600'
+                    },
+                    'SUCCESS': {
+                        bg: 'bg-green-100',
+                        text: 'text-green-600'
+                    },
+                    'INFO': {
+                        bg: 'bg-blue-100',
+                        text: 'text-blue-600'
+                    },
+                    'DEBUG': {
+                        bg: 'bg-gray-100',
+                        text: 'text-gray-600'
+                    }
+                };
+                return colors[level] || colors['INFO'];
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+        }
+
+        // Global functions for button clicks
+        function loadRecentActivity() {
+            dashboard.loadRecentActivity();
+        }
+
+        function downloadLatestLog() {
+            alert('This feature will download the most recent log file from your automation runs.');
+        }
+
+        function refreshDashboard() {
+            location.reload();
+        }
+
+        // Dark Mode Toggle
+        function initDarkMode() {
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            const darkModeIcon = document.getElementById('darkModeIcon');
+            const body = document.body;
+            const html = document.documentElement;
+            
+            // Check for saved dark mode preference or default to light mode
+            const isDarkMode = localStorage.getItem('darkMode') === 'true';
+            
+            if (isDarkMode) {
+                body.classList.add('dark');
+                html.classList.add('dark');
+                darkModeIcon.className = 'fas fa-sun text-sm';
+                darkModeToggle.querySelector('span').textContent = 'Light';
+            }
+            
+            darkModeToggle.addEventListener('click', () => {
+                body.classList.toggle('dark');
+                html.classList.toggle('dark');
+                const isDark = body.classList.contains('dark');
+                
+                if (isDark) {
+                    darkModeIcon.className = 'fas fa-sun text-sm';
+                    darkModeToggle.querySelector('span').textContent = 'Light';
+                    localStorage.setItem('darkMode', 'true');
+                } else {
+                    darkModeIcon.className = 'fas fa-moon text-sm';
+                    darkModeToggle.querySelector('span').textContent = 'Dark';
+                    localStorage.setItem('darkMode', 'false');
+                }
+            });
+        }
+
+        // Initialize dark mode
+        initDarkMode();
+        
+        // Initialize dashboard
+        const dashboard = new AzureDashboard();
+    </script>
+</body>
+</html>

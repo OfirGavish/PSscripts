@@ -1,0 +1,1540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Automation Log Viewer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'azure-blue': '#0078d4',
+                        'azure-dark': '#106ebe',
+                        'success-green': '#107c10',
+                        'warning-orange': '#ff8c00',
+                        'error-red': '#d13438',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Light mode scrollbar (default) - applies to all scrollbars */
+        ::-webkit-scrollbar {
+            width: 14px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9; /* slate-100 */
+            border-radius: 6px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #1e40af; /* blue-800 - dark blue */
+            border-radius: 6px;
+            border: 2px solid #f1f5f9;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #2563eb; /* blue-600 - lighter blue on hover to match dark mode */
+        }
+        
+        /* Dark mode scrollbar - for both document and internal scrollbars */
+        html.dark ::-webkit-scrollbar-track,
+        body.dark ::-webkit-scrollbar-track,
+        .dark ::-webkit-scrollbar-track {
+            background: #1e293b !important; /* slate-800 */
+            border-radius: 6px;
+        }
+        
+        html.dark ::-webkit-scrollbar-thumb,
+        body.dark ::-webkit-scrollbar-thumb,
+        .dark ::-webkit-scrollbar-thumb {
+            background: #1e40af !important; /* blue-800 - dark blue */
+            border: 2px solid #1e293b !important;
+            border-radius: 6px;
+        }
+        
+        html.dark ::-webkit-scrollbar-thumb:hover,
+        body.dark ::-webkit-scrollbar-thumb:hover,
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #2563eb !important; /* blue-600 - lighter blue on hover */
+        }
+        
+        /* Force document scrollbar in dark mode - Firefox support */
+        html.dark,
+        body.dark {
+            scrollbar-width: thin;
+            scrollbar-color: #1e40af #1e293b;
+        }
+        
+        /* Firefox scrollbar */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #1e40af #f1f5f9; /* blue-800 thumb, slate-100 track for light mode */
+        }
+        
+        body.dark *,
+        .dark * {
+            scrollbar-color: #1e40af #1e293b; /* blue-800 thumb, slate-800 track */
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-slate-900 min-h-screen flex flex-col transition-colors duration-300">
+    <!-- Navigation -->
+    <nav class="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700 transition-colors duration-300">
+        <div class="w-full max-w-none px-4">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-4">
+                    <i class="fas fa-file-alt text-2xl text-azure-blue"></i>
+                    <div>
+                        <h1 class="text-xl font-semibold text-gray-800 dark:text-white">Azure Automation Logs</h1>
+                        <p class="text-sm text-gray-600 dark:text-gray-300">Calendar Event Automation</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="darkModeToggle" class="flex items-center space-x-2 text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white transition-colors" title="Toggle Dark Mode">
+                        <i id="darkModeIcon" class="fas fa-moon text-sm"></i>
+                        <span class="text-sm">Dark</span>
+                    </button>
+                    <a href="index.html" class="text-azure-blue hover:text-azure-dark transition-colors">
+                        <i class="fas fa-arrow-left mr-2"></i>Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="w-full max-w-none px-4 py-8 pb-20 bg-gray-50 dark:bg-slate-900 flex-grow">
+        <!-- Log Files and Help Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Log Files List -->
+            <div class="lg:col-span-2">
+                <div class="bg-white dark:bg-slate-800 rounded-lg shadow-md transition-colors duration-300">
+                    <div class="border-b border-gray-200 dark:border-slate-700 px-6 py-4">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-xl font-semibold text-gray-800 dark:text-white flex items-center">
+                                <i class="fas fa-list mr-2 text-azure-blue"></i>
+                                Available Log Files
+                            </h2>
+                            <button id="refreshFiles" 
+                                    class="bg-azure-blue hover:bg-azure-dark text-white px-4 py-2 rounded-md text-sm transition-colors flex items-center">
+                                <i class="fas fa-sync-alt mr-2"></i>
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-6">
+                        <!-- Search -->
+                        <div class="mb-4">
+                            <input type="text" id="fileSearch" 
+                                   class="w-80 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-azure-blue transition-colors duration-300"
+                                   placeholder="Search log files...">
+                        </div>
+                        
+                        <!-- Files List -->
+                        <div id="logFilesList" class="space-y-2">
+                            <!-- Files will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Help Panel -->
+            <div class="lg:col-span-1">
+                <div class="bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-700 rounded-lg p-6 sticky top-4 transition-colors duration-300">
+                    <div class="flex items-start space-x-3">
+                        <i class="fas fa-info-circle text-blue-600 dark:text-blue-400 mt-1"></i>
+                        <div>
+                            <h3 class="text-lg font-medium text-blue-900 dark:text-blue-300 mb-3">How It Works</h3>
+                            
+                            <div class="text-blue-800 dark:text-gray-300 text-sm space-y-3">
+                                <div>
+                                    <p class="font-medium mb-1">🚀 Azure Storage (Production):</p>
+                                    <p class="text-xs">Uses REST API to list all .log files efficiently</p>
+                                </div>
+                                
+                                <div>
+                                    <p class="font-medium mb-1">🔍 Local Testing:</p>
+                                    <p class="text-xs mb-1">Searches for specific files only:</p>
+                                    <ul class="text-xs space-y-0.5 ml-2">
+                                        <li>• Today's dated logs</li>
+                                        <li>• automation.log</li>
+                                        <li>• latest.log</li>
+                                        <li>• events.log</li>
+                                    </ul>
+                                </div>
+                                
+                                <div class="pt-2 border-t border-blue-200">
+                                    <p class="text-xs"><strong>Performance:</strong> Optimized discovery prevents hundreds of unnecessary requests</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log Viewer Panel -->
+        <div id="logViewerPanel" class="bg-white dark:bg-slate-800 rounded-lg shadow-md transition-colors duration-300" style="display: none;">
+            <div class="border-b border-gray-200 dark:border-slate-700 px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xl font-semibold text-gray-800 dark:text-white flex items-center">
+                        <i class="fas fa-eye mr-2 text-azure-blue"></i>
+                        <span id="currentLogFile">Log Viewer</span>
+                    </h2>
+                    <div class="flex space-x-2">
+                        <button id="downloadLog" 
+                                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm transition-colors flex items-center">
+                            <i class="fas fa-download mr-2"></i>
+                            Download
+                        </button>
+                        <button id="closeViewer" 
+                                class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm transition-colors flex items-center">
+                            <i class="fas fa-times mr-2"></i>
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6">
+                <!-- Filters -->
+                <div class="flex flex-wrap gap-4 mb-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Level Filter</label>
+                        <select id="levelFilter" class="px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-azure-blue transition-colors duration-300">
+                            <option value="">All Levels</option>
+                            <option value="ERROR">Error</option>
+                            <option value="WARNING">Warning</option>
+                            <option value="INFO">Info</option>
+                            <option value="SUCCESS">Success</option>
+                            <option value="DEBUG">Debug</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Search</label>
+                        <input type="text" id="logSearch" 
+                               class="px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-azure-blue transition-colors duration-300"
+                               placeholder="Search log entries...">
+                    </div>
+                    <div class="flex items-end">
+                        <button id="clearFilters" 
+                                class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded-md text-sm transition-colors">
+                            Clear Filters
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Log Content -->
+                <div id="logContent" class="space-y-2 max-h-96 overflow-y-auto border border-gray-200 dark:border-slate-700 rounded-md p-4 bg-gray-50 dark:bg-slate-900 transition-colors duration-300">
+                    <!-- Log entries will be populated here -->
+                </div>
+
+                <!-- Log Analysis Panel -->
+                <div id="logAnalysisPanel" class="mt-6 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-slate-800 dark:to-slate-900 border border-purple-200 dark:border-slate-700 rounded-lg p-6 transition-colors duration-300" style="display: none;">
+                    <div class="flex items-center mb-4">
+                        <i class="fas fa-brain text-purple-600 dark:text-purple-400 text-xl mr-3"></i>
+                        <h3 class="text-lg font-semibold text-purple-900 dark:text-purple-300">Intelligent Log Analysis</h3>
+                        <div class="ml-auto bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-3 py-1 rounded-full text-xs font-medium flex items-center border border-green-200 dark:border-green-800 transition-colors duration-300">
+                            <i class="fas fa-check-circle mr-1"></i>
+                            Auto-analyzed
+                        </div>
+                    </div>
+                    
+                    <div id="analysisResults" class="space-y-4">
+                        <!-- Analysis results will be populated here -->
+                        <div class="text-center text-gray-500 dark:text-gray-400 py-4">
+                            <i class="fas fa-cog fa-spin text-2xl text-gray-300 dark:text-gray-600 mb-2"></i>
+                            <p>Analyzing logs for common issues and patterns...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+
+    <!-- Loading Modal -->
+    <div id="loadingModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style="display: none;">
+        <div class="bg-white dark:bg-slate-800 rounded-lg p-6 flex items-center space-x-4 transition-colors duration-300">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-azure-blue"></div>
+            <span class="text-gray-700 dark:text-gray-300">Loading...</span>
+        </div>
+    </div>
+
+    <script>
+        class AzureLogViewer {
+            constructor() {
+                this.logFiles = [];
+                this.currentLogs = [];
+                this.filteredLogs = [];
+                
+                this.initializeEventListeners();
+                this.loadLogFiles();
+            }
+
+            initializeEventListeners() {
+                // File search
+                document.getElementById('fileSearch').addEventListener('input', (e) => {
+                    this.filterLogFiles(e.target.value);
+                });
+
+                // Refresh files
+                document.getElementById('refreshFiles').addEventListener('click', () => {
+                    this.loadLogFiles();
+                });
+
+                // Log viewer controls
+                document.getElementById('closeViewer').addEventListener('click', () => {
+                    document.getElementById('logViewerPanel').style.display = 'none';
+                });
+
+                document.getElementById('downloadLog').addEventListener('click', () => {
+                    this.downloadCurrentLog();
+                });
+
+                // Log filters
+                document.getElementById('levelFilter').addEventListener('change', (e) => {
+                    this.filterLogs();
+                });
+
+                document.getElementById('logSearch').addEventListener('input', (e) => {
+                    this.filterLogs();
+                });
+
+                document.getElementById('clearFilters').addEventListener('click', () => {
+                    document.getElementById('levelFilter').value = '';
+                    document.getElementById('logSearch').value = '';
+                    this.filterLogs();
+                });
+
+                // Check for file parameter in URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const fileParam = urlParams.get('file');
+                if (fileParam) {
+                    setTimeout(() => {
+                        this.loadLogFile(`/logs/${fileParam}`, fileParam);
+                    }, 1000);
+                }
+            }
+
+            showLoading() {
+                document.getElementById('loadingModal').style.display = 'flex';
+            }
+
+            hideLoading() {
+                document.getElementById('loadingModal').style.display = 'none';
+            }
+
+            async loadLogFiles() {
+                this.showLoading();
+                
+                try {
+                    // Try to discover log files by attempting to load common patterns
+                    const logFiles = await this.discoverLogFiles();
+                    this.logFiles = logFiles;
+                    this.displayLogFiles(this.logFiles);
+                    this.updateStats();
+                } catch (error) {
+                    console.error('Failed to load log files:', error);
+                    this.displayNoLogsMessage();
+                } finally {
+                    this.hideLoading();
+                }
+            }
+
+            async discoverLogFiles() {
+                console.log('🔍 Starting log file discovery...');
+                console.log('Current URL:', window.location.href);
+                console.log('Current hostname:', window.location.hostname);
+                
+                // Try Azure Storage REST API first (when deployed to storage account)
+                try {
+                    console.log('🌐 Attempting Azure Storage API discovery...');
+                    const azureFiles = await this.listBlobsFromAzureStorage();
+                    console.log('✅ Azure Storage API returned', azureFiles.length, 'files:', azureFiles.map(f => f.name));
+                    if (azureFiles.length > 0) {
+                        return azureFiles.sort((a, b) => b.lastModified - a.lastModified);
+                    }
+                } catch (error) {
+                    console.log('❌ Azure Storage API failed:', error.message);
+                    console.log('🔄 Falling back to local discovery...');
+                }
+
+                // Fallback to targeted discovery for local testing
+                const localFiles = await this.discoverLogFilesLocal();
+                console.log('📁 Local discovery returned', localFiles.length, 'files:', localFiles.map(f => f.name));
+                return localFiles;
+            }
+
+            async probeForLogFiles() {
+                const logFiles = [];
+                const baseUrl = `${window.location.origin}/logs/`;
+                
+                // Common log file patterns to probe
+                const currentDate = new Date();
+                const dateStr = currentDate.toISOString().split('T')[0].replace(/-/g, '');
+                
+                // Build targeted probe list (only current files)
+                const probePathsRaw = [
+                    // Essential automation logs (likely to exist)
+                    'latest.log',
+                    'automation.log',
+                    
+                    // Today's logs only (Sep 24, 2025)
+                    'CalendarEventCreation_20250924.log',
+                    'calendar-automation-log-20250924-080025.log',
+                    'calendar-automation-log-20250924-123725.log',  
+                    'calendar-automation-log-20250924-130223.log', // Another time variant
+                    'mock-events-20250924.log',
+                    
+                    // Current day pattern (if different from hardcoded)
+                    `calendar-automation-log-${dateStr}.log`,
+                    `CalendarEventCreation_${dateStr}.log`,
+                    `automation-${dateStr}.log`,
+                    
+                    // Common variations for current day
+                    `calendar-automation-log-${dateStr}-080025.log`,
+                    `calendar-automation-log-${dateStr}-123725.log`,
+                    `calendar-automation-log-${dateStr}-130223.log`,
+                    `mock-events-${dateStr}.log`,
+                    
+                    // Add the actual name of your 7th log file here when identified
+                    // 'your-missing-file.log'
+                ];
+                
+                // Remove duplicates to avoid redundant requests
+                const probePaths = [...new Set(probePathsRaw)];
+                
+                console.log('🔍 Optimized probing for', probePaths.length, 'unique log files (reduced from', probePathsRaw.length, 'potential files)...');
+                
+                // Probe files in parallel (but limit concurrency)
+                const batchSize = 5;
+                for (let i = 0; i < probePaths.length; i += batchSize) {
+                    const batch = probePaths.slice(i, i + batchSize);
+                    const promises = batch.map(async (fileName) => {
+                        try {
+                            const url = baseUrl + fileName;
+                            const response = await fetch(url, { method: 'HEAD' });
+                            if (response.ok) {
+                                const size = response.headers.get('content-length') || 'Unknown';
+                                const lastModified = response.headers.get('last-modified');
+                                console.log('✅ Found log file:', fileName, `(${size} bytes)`);
+                                return {
+                                    name: fileName,
+                                    path: url,
+                                    url: url,
+                                    size: parseInt(size) || 0,
+                                    lastModified: lastModified ? new Date(lastModified) : new Date()
+                                };
+                            }
+                        } catch (error) {
+                            // File doesn't exist or other error - ignore
+                        }
+                        return null;
+                    });
+                    
+                    const results = await Promise.all(promises);
+                    logFiles.push(...results.filter(f => f !== null));
+                }
+                
+                // Sort by last modified (newest first)
+                logFiles.sort((a, b) => b.lastModified - a.lastModified);
+                
+                console.log('📋 Smart probing found', logFiles.length, 'accessible log files');
+                return logFiles;
+            }
+
+            async listBlobsFromAzureStorage() {
+                const logFiles = [];
+                
+                try {
+                    // When deployed to Azure Storage static website, the REST API endpoint is different
+                    // We need to construct the proper storage account URL
+                    const hostname = window.location.hostname;
+                    
+                    // Extract storage account name from hostname (format: accountname.z6.web.core.windows.net)
+                    const storageAccountMatch = hostname.match(/^([^.]+)\.z\d+\.web\.core\.windows\.net$/);
+                    if (!storageAccountMatch) {
+                        throw new Error('Not running on Azure Storage static website');
+                    }
+                    
+                    const storageAccountName = storageAccountMatch[1];
+                    // Correct Azure Storage REST API endpoint for listing blobs with prefix
+                    const storageApiUrl = `https://${storageAccountName}.blob.core.windows.net/$web?restype=container&comp=list&prefix=logs/`;
+                    
+                    console.log('🌐 Trying Azure Storage REST API:', storageApiUrl);
+                    const response = await fetch(storageApiUrl);
+                    
+                    if (!response.ok) {
+                        console.log('❌ Azure Storage REST API failed:', response.status, response.statusText);
+                        console.log('� Falling back to smart probing...');
+                        
+                        // Fallback to probing only as last resort
+                        const probedFiles = await this.probeForLogFiles();
+                        if (probedFiles.length > 0) {
+                            console.log('✅ Found', probedFiles.length, 'log files via smart probing fallback');
+                            return probedFiles;
+                        }
+                        throw new Error(`Azure Storage REST API not accessible: ${response.status}`);
+                    }
+                    
+                    const xmlText = await response.text();
+                    console.log('📄 Azure Storage API XML response length:', xmlText.length);
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+                    
+                    // Parse the XML response for blob information
+                    const blobs = xmlDoc.querySelectorAll('Blob');
+                    console.log('📦 Found', blobs.length, 'blob(s) in Azure Storage API response');
+                    
+                    for (const blob of blobs) {
+                        const nameElement = blob.querySelector('Name');
+                        const propertiesElement = blob.querySelector('Properties');
+                        
+                        if (nameElement && propertiesElement) {
+                            const fullName = nameElement.textContent;
+                            const fileName = fullName.replace('logs/', '');
+                            
+                            console.log('🔍 Found blob:', fullName, 'File name:', fileName);
+                            
+                            // Only include .log files
+                            if (fileName.endsWith('.log')) {
+                                console.log('✅ Including .log file:', fileName);
+                                const lastModifiedElement = propertiesElement.querySelector('Last-Modified');
+                                const contentLengthElement = propertiesElement.querySelector('Content-Length');
+                                
+                                const lastModified = lastModifiedElement ? 
+                                    new Date(lastModifiedElement.textContent) : 
+                                    new Date();
+                                const size = contentLengthElement ? 
+                                    parseInt(contentLengthElement.textContent) : 
+                                    0;
+                                
+                                logFiles.push({
+                                    name: fileName,
+                                    path: `${window.location.origin}/logs/${fileName}`,
+                                    url: `${window.location.origin}/logs/${fileName}`,
+                                    size: size,
+                                    lastModified: lastModified
+                                });
+                            }
+                        }
+                    }
+                    
+                    console.log('🎉 Azure Storage API found', logFiles.length, 'log files total');
+                    return logFiles;
+                    
+                } catch (error) {
+                    console.log('Error accessing Azure Storage API:', error);
+                    throw error;
+                }
+            }
+
+            async discoverLogFilesLocal() {
+                const logFiles = [];
+                const today = new Date();
+                const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
+                
+                // For local testing, only check today's files and known static files
+                const targetFiles = [
+                    // Today's pattern files
+                    `CalendarEventCreation_${dateStr}.log`,
+                    `automation_${dateStr}.log`,
+                    `script_${dateStr}.log`,
+                    `calendar-automation-log-${dateStr}-080025.log`,
+                    // Your specific automation log files
+                    'calendar-automation-log-20250924-123725.log',
+                    'calendar-automation-log-20250924-130223.log',
+                    // Static files that are commonly present
+                    'automation.log',
+                    'latest.log',
+                    // Mock file for testing
+                    'mock-events-20250924.log'
+                    // Add the actual name of your 7th log file here when identified
+                ];
+                
+                const foundFiles = new Set(); // Track found files to avoid duplicates
+                
+                for (const filename of targetFiles) {
+                    try {
+                        // Skip if we've already found this file
+                        if (foundFiles.has(filename)) {
+                            continue;
+                        }
+                        
+                        // Use HEAD first for efficiency
+                        let response = await fetch(`/logs/${filename}`, { method: 'HEAD' });
+                        
+                        if (!response.ok) {
+                            // Fallback to GET for compatibility
+                            response = await fetch(`/logs/${filename}`, { method: 'GET' });
+                        }
+                        
+                        if (response.ok) {
+                            const lastModified = new Date(response.headers.get('Last-Modified') || Date.now());
+                            const size = parseInt(response.headers.get('Content-Length') || '0');
+                            
+                            logFiles.push({
+                                name: filename,
+                                path: `/logs/${filename}`,
+                                lastModified,
+                                size,
+                                isLogFile: true
+                            });
+                            
+                            foundFiles.add(filename); // Mark as found
+                        }
+                    } catch (error) {
+                        // File doesn't exist, continue silently
+                    }
+                }
+                
+                return logFiles;
+            }
+
+            displayLogFiles(files) {
+                const container = document.getElementById('logFilesList');
+                
+                if (files.length === 0) {
+                    this.displayNoLogsMessage();
+                    return;
+                }
+                
+                container.innerHTML = files.map(file => `
+                    <div class="flex items-center justify-between p-4 border border-gray-200 dark:border-slate-700 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700 cursor-pointer transition-colors duration-300"
+                         onclick="azureLogViewer.loadLogFile('${file.path}', '${file.name}')">
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-file-alt text-azure-blue"></i>
+                            <div>
+                                <p class="font-medium text-gray-900 dark:text-white">${file.name}</p>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">${file.lastModified.toLocaleString()}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm text-gray-500 dark:text-gray-400">${this.formatFileSize(file.size)}</p>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            displayNoLogsMessage() {
+                const container = document.getElementById('logFilesList');
+                container.innerHTML = `
+                    <div class="text-center py-8">
+                        <i class="fas fa-folder-open text-gray-400 text-4xl mb-4"></i>
+                        <p class="text-gray-500 mb-2">No log files found</p>
+                        <p class="text-sm text-gray-400">Make sure log files exist in the /logs/ folder and are accessible</p>
+                    </div>
+                `;
+            }
+
+            filterLogFiles(searchTerm) {
+                const filtered = this.logFiles.filter(file => 
+                    file.name.toLowerCase().includes(searchTerm.toLowerCase())
+                );
+                this.displayLogFiles(filtered);
+            }
+
+            async loadLogFile(filePath, fileName) {
+                this.showLoading();
+                
+                try {
+                    const response = await fetch(filePath);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const content = await response.text();
+                    this.currentLogs = this.parseLogContent(content, fileName);
+                    this.filteredLogs = [...this.currentLogs];
+                    
+                    document.getElementById('currentLogFile').textContent = fileName;
+                    document.getElementById('logViewerPanel').style.display = 'block';
+                    document.getElementById('logAnalysisPanel').style.display = 'block';
+                    this.displayLogs(this.filteredLogs);
+                    
+                    // Automatically run analysis for the loaded logs
+                    setTimeout(() => this.analyzeCurrentLogs(), 500);
+                    
+                    // Scroll to log viewer
+                    document.getElementById('logViewerPanel').scrollIntoView({ behavior: 'smooth' });
+                } catch (error) {
+                    console.error('Failed to load log file:', error);
+                    alert(`Failed to load log file: ${error.message}`);
+                } finally {
+                    this.hideLoading();
+                }
+            }
+
+            parseLogContent(content, fileName) {
+                const lines = content.split('\n').filter(line => line.trim());
+                return lines.map((line, index) => {
+                    // Parse log format: [timestamp] [level] message
+                    const match = line.match(/^\[(.*?)\]\s*\[(.*?)\]\s*(.*)$/);
+                    
+                    if (match) {
+                        return {
+                            timestamp: new Date(match[1]),
+                            level: match[2].toUpperCase(),
+                            message: match[3],
+                            rawLine: line, // Keep original line for pattern matching
+                            fileName: fileName,
+                            lineNumber: index + 1
+                        };
+                    }
+                    
+                    // Enhanced fallback parsing for automation log patterns
+                    const upperLine = line.toUpperCase();
+                    let level = 'INFO';
+                    
+                    // Enhanced error detection
+                    if (upperLine.includes('[ERROR]') || 
+                        upperLine.includes('ERROR:') || 
+                        upperLine.includes('FAILED AFTER') ||
+                        upperLine.includes('FAILED WITH ERROR:') ||
+                        upperLine.includes('REQUEST_UNSUPPORTEDQUERY') ||
+                        upperLine.includes('COULDN\'T BE FOUND') ||
+                        upperLine.includes('STATUS: 400') ||
+                        upperLine.includes('STATUS: 404') ||
+                        upperLine.includes('STATUS: 500')) {
+                        level = 'ERROR';
+                    } 
+                    // Enhanced warning detection
+                    else if (upperLine.includes('[WARNING]') || 
+                             upperLine.includes('WARNING:') || 
+                             upperLine.includes('WARN:') ||
+                             upperLine.includes('RETRY ATTEMPT') ||
+                             upperLine.includes('RETRYING...') ||
+                             upperLine.includes('MIGHT AFFECT') ||
+                             upperLine.includes('INVALID SHOWAS VALUE') ||
+                             upperLine.includes('PERMISSIONS MIGHT BE MISSING') ||
+                             upperLine.includes('MANUAL REVIEW')) {
+                        level = 'WARNING';
+                    } 
+                    // Enhanced success detection
+                    else if (upperLine.includes('[SUCCESS]') || 
+                             upperLine.includes('SUCCESS:') || 
+                             upperLine.includes('COMPLETED') || 
+                             upperLine.includes('SUCCESSFUL') ||
+                             upperLine.includes('✓') ||
+                             upperLine.includes('CONNECTED TO MICROSOFT GRAPH') ||
+                             upperLine.includes('CONNECTED TO EXCHANGE ONLINE') ||
+                             upperLine.includes('FILE DOWNLOADED SUCCESSFULLY') ||
+                             upperLine.includes('EXCEL DATA IMPORTED SUCCESSFULLY')) {
+                        level = 'SUCCESS';
+                    }
+                    
+                    // Try to extract timestamp from anywhere in the line
+                    let extractedTimestamp = new Date();
+                    let timestampSource = 'current_time';
+                    
+                    // Look for timestamp patterns like [2025-09-24 16:21:30] or similar
+                    const timestampMatch = line.match(/\[(\d{4}-\d{2}-\d{2}[\s\T]\d{2}:\d{2}:\d{2})\]/);
+                    if (timestampMatch) {
+                        const parsed = new Date(timestampMatch[1]);
+                        if (!isNaN(parsed.getTime())) {
+                            extractedTimestamp = parsed;
+                            timestampSource = 'extracted_bracketed';
+                        }
+                    }
+                    // Also try ISO-like patterns without brackets
+                    else {
+                        const isoMatch = line.match(/(\d{4}-\d{2}-\d{2}[\s\T]\d{2}:\d{2}:\d{2})/);
+                        if (isoMatch) {
+                            const parsed = new Date(isoMatch[1]);
+                            if (!isNaN(parsed.getTime())) {
+                                extractedTimestamp = parsed;
+                                timestampSource = 'extracted_iso';
+                            }
+                        }
+                    }
+                    
+                    // Debug logging for timestamp extraction
+                    if (line.includes('verbose logs') || line.includes('Total log entries')) {
+                        console.log('🔍 Timestamp extraction for:', line.substring(0, 50) + '...');
+                        console.log('  Source:', timestampSource);
+                        console.log('  Timestamp:', extractedTimestamp.toISOString(), '(' + extractedTimestamp.toLocaleString() + ')');
+                    }
+                    
+                    return {
+                        timestamp: extractedTimestamp,
+                        level: level,
+                        message: line,
+                        rawLine: line, // Keep original line for pattern matching
+                        fileName: fileName,
+                        lineNumber: index + 1
+                    };
+                });
+            }
+
+            displayLogs(logs) {
+                const container = document.getElementById('logContent');
+                
+                if (logs.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-4">No log entries match the current filters</p>';
+                    return;
+                }
+                
+                container.innerHTML = logs.map(log => {
+                    const levelClass = this.getLevelClass(log.level);
+                    const levelIcon = this.getLevelIcon(log.level);
+                    
+                    return `
+                        <div class="flex items-start space-x-3 p-3 border border-gray-200 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 transition-colors duration-300 ${levelClass.bg}">
+                            <i class="${levelIcon} ${levelClass.text} mt-1"></i>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center space-x-2 mb-1">
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${levelClass.badge}">
+                                        ${log.level}
+                                    </span>
+                                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                                        ${log.timestamp.toLocaleString()}
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-900 dark:text-gray-100 break-words">${this.escapeHtml(log.message)}</p>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            filterLogs() {
+                const levelFilter = document.getElementById('levelFilter').value;
+                const searchFilter = document.getElementById('logSearch').value.toLowerCase();
+                
+                this.filteredLogs = this.currentLogs.filter(log => {
+                    const levelMatch = !levelFilter || log.level === levelFilter;
+                    const searchMatch = !searchFilter || log.message.toLowerCase().includes(searchFilter);
+                    return levelMatch && searchMatch;
+                });
+                
+                this.displayLogs(this.filteredLogs);
+            }
+
+            downloadCurrentLog() {
+                if (this.currentLogs.length === 0) {
+                    alert('No log data to download');
+                    return;
+                }
+                
+                const logContent = this.currentLogs.map(log => 
+                    `[${log.timestamp.toISOString()}] [${log.level}] ${log.message}`
+                ).join('\n');
+                
+                const fileName = document.getElementById('currentLogFile').textContent || 'log.txt';
+                const blob = new Blob([logContent], { type: 'text/plain' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }
+
+            updateStats() {
+                // This could update some stats display if needed
+            }
+
+            formatFileSize(bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+            }
+
+            getLevelClass(level) {
+                const classes = {
+                    'ERROR': {
+                        bg: 'bg-red-50',
+                        text: 'text-red-600',
+                        badge: 'bg-red-100 text-red-800'
+                    },
+                    'WARNING': {
+                        bg: 'bg-orange-50',
+                        text: 'text-orange-600',
+                        badge: 'bg-orange-100 text-orange-800'
+                    },
+                    'SUCCESS': {
+                        bg: 'bg-green-50',
+                        text: 'text-green-600',
+                        badge: 'bg-green-100 text-green-800'
+                    },
+                    'INFO': {
+                        bg: 'bg-blue-50',
+                        text: 'text-blue-600',
+                        badge: 'bg-blue-100 text-blue-800'
+                    },
+                    'DEBUG': {
+                        bg: 'bg-gray-50',
+                        text: 'text-gray-600',
+                        badge: 'bg-gray-100 text-gray-800'
+                    }
+                };
+                return classes[level] || classes['INFO'];
+            }
+
+            getLevelIcon(level) {
+                const icons = {
+                    'ERROR': 'fas fa-times-circle',
+                    'WARNING': 'fas fa-exclamation-triangle',
+                    'SUCCESS': 'fas fa-check-circle',
+                    'INFO': 'fas fa-info-circle',
+                    'DEBUG': 'fas fa-bug'
+                };
+                return icons[level] || 'fas fa-info-circle';
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            analyzeCurrentLogs() {
+                if (!this.currentLogs || this.currentLogs.length === 0) {
+                    document.getElementById('analysisResults').innerHTML = 
+                        '<div class="text-center text-gray-500 py-4">No logs loaded to analyze</div>';
+                    return;
+                }
+
+                const analysisPanel = document.getElementById('logAnalysisPanel');
+                analysisPanel.style.display = 'block';
+
+                const issues = this.identifyKnownIssues(this.currentLogs);
+                const summary = this.generateLogSummary(this.currentLogs);
+                
+                document.getElementById('analysisResults').innerHTML = this.renderAnalysisResults(summary, issues);
+            }
+
+            identifyKnownIssues(logs) {
+                const issues = [];
+                const errorLogs = logs.filter(log => log.level === 'ERROR');
+                const warningLogs = logs.filter(log => log.level === 'WARNING');
+                const infoLogs = logs.filter(log => log.level === 'INFO');
+
+                // First, identify successful user fallbacks to exclude from distribution group errors
+                const userFallbackEmails = this.identifySuccessfulUserFallbacks(logs);
+
+                // Enhanced Azure Automation and Calendar Event issues based on real log patterns
+                const knownPatterns = [
+                    {
+                        pattern: /distribution group.*failed|couldn't be found.*outlook\.com|get distribution group.*failed/i,
+                        type: 'distribution-group',
+                        title: 'Distribution Group Lookup Failures',
+                        description: 'Unable to find distribution groups in Exchange Online',
+                        solution: 'Verify email addresses are correct, check Exchange Online permissions, ensure the group exists in the tenant',
+                        icon: 'fas fa-users-slash',
+                        color: 'red',
+                        excludeIfFallbackExists: true // Flag to exclude if user fallback exists
+                    },
+                    {
+                        pattern: /request_unsupportedquery|invalid expression.*equalsMatch|get group.*failed/i,
+                        type: 'graph-api-query',
+                        title: 'Microsoft Graph API Query Errors',
+                        description: 'Graph API query syntax or filter expression issues',
+                        solution: 'Review Graph API filter syntax, check for unsupported operators like "tolower", use supported query patterns',
+                        icon: 'fas fa-search-minus',
+                        color: 'red'
+                    },
+                    {
+                        pattern: /permissions might be missing.*files\.read|this might affect.*calendar events/i,
+                        type: 'missing-permissions',
+                        title: 'Missing Graph API Permissions',
+                        description: 'Required permissions are missing from the application registration',
+                        solution: 'Add Files.Read permission to the app registration, ensure admin consent is granted for all required permissions',
+                        icon: 'fas fa-key',
+                        color: 'orange'
+                    },
+                    {
+                        pattern: /invalid showas value|no starttime.*manual review/i,
+                        type: 'data-quality',
+                        title: 'Calendar Event Data Issues',
+                        description: 'Invalid or missing data in calendar event definitions',
+                        solution: 'Review Excel file data, ensure all events have valid StartTime and ShowAs values, clean up incomplete entries',
+                        icon: 'fas fa-calendar-check',
+                        color: 'orange'
+                    },
+                    {
+                        pattern: /retry attempt.*of.*for|retrying\.\.\.|failed.*retries.*with error/i,
+                        type: 'retry-patterns',
+                        title: 'API Retry Attempts',
+                        description: 'Multiple retry attempts detected for API operations',
+                        solution: 'Check network stability, verify service availability, consider increasing timeout values or retry delays',
+                        icon: 'fas fa-redo',
+                        color: 'orange'
+                    },
+                    {
+                        pattern: /treating.*as.*individual.*user|no.*m365.*group.*found.*treating/i,
+                        type: 'user-fallback-success',
+                        title: 'User Email Fallback (Expected Behavior)',
+                        description: 'System correctly identified individual user emails and processed them as users rather than groups',
+                        solution: 'This is normal behavior. The system tries to find groups first, then falls back to individual users when no group is found.',
+                        icon: 'fas fa-user-check',
+                        color: 'green'
+                    },
+                    {
+                        pattern: /authentication.*fail|401|unauthorized/i,
+                        type: 'authentication',
+                        title: 'Authentication Issues',
+                        description: 'Authentication failures detected',
+                        solution: 'Check managed identity permissions, ensure Storage Blob Data Contributor role is assigned to the Automation Account',
+                        icon: 'fas fa-user-lock',
+                        color: 'red'
+                    },
+                    {
+                        pattern: /permission.*denied|403|forbidden|access.*denied/i,
+                        type: 'permissions',
+                        title: 'Permission Issues',
+                        description: 'Access denied or permission errors found',
+                        solution: 'Verify RBAC permissions on storage account and resource group. Check if Automation Account has required roles.',
+                        icon: 'fas fa-ban',
+                        color: 'red'
+                    },
+                    {
+                        pattern: /timeout|timed out|connection.*timeout/i,
+                        type: 'timeout',
+                        title: 'Timeout Issues',
+                        description: 'Connection or operation timeouts detected',
+                        solution: 'Check network connectivity, increase timeout values, verify service endpoints are accessible',
+                        icon: 'fas fa-clock',
+                        color: 'orange'
+                    },
+                    {
+                        pattern: /quota.*exceed|rate.*limit|throttl/i,
+                        type: 'throttling',
+                        title: 'Rate Limiting/Throttling',
+                        description: 'API rate limits or quota exceeded',
+                        solution: 'Implement retry logic with exponential backoff, reduce API call frequency, check service limits',
+                        icon: 'fas fa-tachometer-alt',
+                        color: 'orange'
+                    },
+                    {
+                        pattern: /calendar.*not.*found|event.*not.*found|graph.*api.*error/i,
+                        type: 'calendar',
+                        title: 'Calendar/Graph API Issues',
+                        description: 'Microsoft Graph API or calendar-related errors',
+                        solution: 'Verify Graph API permissions, check calendar exists, ensure proper OAuth scopes are granted',
+                        icon: 'fas fa-calendar-times',
+                        color: 'red'
+                    },
+                    {
+                        pattern: /network.*error|dns.*resolution|host.*not.*found/i,
+                        type: 'network',
+                        title: 'Network Connectivity',
+                        description: 'Network connectivity issues detected',
+                        solution: 'Check DNS resolution, verify network security groups, test service endpoints',
+                        icon: 'fas fa-wifi',
+                        color: 'red'
+                    },
+                    {
+                        pattern: /storage.*not.*found|container.*not.*found|blob.*not.*found/i,
+                        type: 'storage',
+                        title: 'Storage Issues',
+                        description: 'Azure Storage access problems',
+                        solution: 'Verify storage account exists, check container permissions, ensure blob/container names are correct',
+                        icon: 'fas fa-database',
+                        color: 'red'
+                    }
+                ];
+
+                const allLogs = [...errorLogs, ...warningLogs, ...infoLogs];
+                
+                knownPatterns.forEach(pattern => {
+                    let matchingLogs = allLogs.filter(log => 
+                        pattern.pattern.test(log.message) || pattern.pattern.test(log.rawLine || '')
+                    );
+                    
+                    // Special handling for distribution group pattern - exclude successful user fallbacks
+                    if (pattern.type === 'distribution-group') {
+                        console.log('🔍 Filtering distribution group errors...');
+                        console.log('  User fallback emails found:', Array.from(userFallbackEmails));
+                        console.log('  Original matching logs:', matchingLogs.length);
+                        
+                        matchingLogs = matchingLogs.filter(log => {
+                            // Extract email from the log message
+                            const emailMatch = log.message.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+                            if (emailMatch) {
+                                const email = emailMatch[1];
+                                const shouldExclude = userFallbackEmails.has(email);
+                                console.log(`  Email: ${email}, Has fallback: ${shouldExclude}, Include in errors: ${!shouldExclude}`);
+                                // Only include this as an error if the email did NOT have a successful user fallback
+                                return !shouldExclude;
+                            }
+                            console.log('  No email extracted from:', log.message.substring(0, 50) + '...');
+                            return true; // Include if we can't extract email
+                        });
+                        
+                        console.log('  Filtered matching logs:', matchingLogs.length);
+                    }
+                    
+                    if (matchingLogs.length > 0) {
+                        issues.push({
+                            ...pattern,
+                            count: matchingLogs.length,
+                            logs: matchingLogs.slice(0, 3), // Show first 3 examples
+                            severity: matchingLogs.some(log => log.level === 'ERROR') ? 'high' : 'medium'
+                        });
+                    }
+                });
+                
+                // Add positive feedback for successful user fallbacks
+                if (userFallbackEmails.size > 0) {
+                    issues.push({
+                        type: 'user-fallback-success',
+                        title: 'Individual User Processing (Success)',
+                        description: `Successfully processed ${userFallbackEmails.size} email(s) as individual users rather than groups`,
+                        solution: 'This is expected behavior. Emails were correctly identified as individual users after group lookup failed.',
+                        icon: 'fas fa-user-check',
+                        color: 'green',
+                        count: userFallbackEmails.size,
+                        logs: Array.from(userFallbackEmails).slice(0, 3).map(email => ({
+                            message: `Individual user processing successful for: ${email}`,
+                            level: 'SUCCESS'
+                        })),
+                        severity: 'success'
+                    });
+                }
+
+                return issues;
+            }
+
+            identifySuccessfulUserFallbacks(logs) {
+                const userFallbackEmails = new Set();
+                
+                console.log('🔍 Looking for successful user fallbacks...');
+                console.log('  Total logs to scan:', logs.length);
+                
+                // First, scan ALL logs for successful user fallback messages
+                logs.forEach((log, index) => {
+                    if (log.message && (
+                        log.message.includes('No M365 group found, treating') ||
+                        log.message.includes('treating') && log.message.includes('individual user') ||
+                        log.message.includes('Successfully created event for individual user') ||
+                        log.message.includes('Processing deletion for individual user')
+                    )) {
+                        // Extract email from the fallback message
+                        const emailMatch = log.message.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+                        if (emailMatch) {
+                            const email = emailMatch[1];
+                            console.log(`  ✅ Found user fallback at log ${index}: ${email}`);
+                            console.log(`    Message: ${log.message.substring(0, 80)}...`);
+                            userFallbackEmails.add(email);
+                        }
+                    }
+                });
+                
+                // Also look for the traditional pattern-based approach (distribution group error → fallback)
+                // This is kept as backup in case the above misses some patterns
+                for (let i = 0; i < logs.length - 10; i++) {
+                    const currentLog = logs[i];
+                    
+                    // Look for distribution group failures
+                    if (currentLog.message && currentLog.message.includes('couldn\'t be found') && 
+                        currentLog.message.includes('outlook.com')) {
+                        
+                        // Extract email from error message
+                        const emailMatch = currentLog.message.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+                        if (emailMatch) {
+                            const email = emailMatch[1];
+                            
+                            // Look in the next several log entries for successful individual user processing
+                            for (let j = i + 1; j < Math.min(i + 15, logs.length); j++) {
+                                const futureLog = logs[j];
+                                
+                                // Check if this email was successfully processed as an individual user
+                                if (futureLog.message && (
+                                    (futureLog.message.includes('treating') && futureLog.message.includes('individual user') && futureLog.message.includes(email)) ||
+                                    (futureLog.message.includes('No M365 group found') && futureLog.message.includes(email)) ||
+                                    (futureLog.message.includes('Successfully created event for individual user') && futureLog.message.includes(email)) ||
+                                    (futureLog.message.includes('Processing deletion for individual user') && futureLog.message.includes(email))
+                                )) {
+                                    if (!userFallbackEmails.has(email)) {
+                                        console.log(`  📧 Found additional fallback via pattern matching: ${email}`);
+                                        userFallbackEmails.add(email);
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                console.log('  🎯 Final user fallback emails:', Array.from(userFallbackEmails));
+                return userFallbackEmails;
+            }
+
+            generateLogSummary(logs) {
+                const summary = {
+                    total: logs.length,
+                    errors: logs.filter(log => log.level === 'ERROR').length,
+                    warnings: logs.filter(log => log.level === 'WARNING').length,
+                    success: logs.filter(log => log.level === 'SUCCESS').length,
+                    timespan: this.getLogTimespan(logs),
+                    mostCommonErrors: this.getMostCommonErrors(logs)
+                };
+
+                return summary;
+            }
+
+            getLogTimespan(logs) {
+                if (logs.length === 0) return 'No logs';
+                
+                // Filter out timestamps that are too recent (likely parsing artifacts)
+                const now = new Date();
+                const oneHourAgo = new Date(now.getTime() - 3600000); // 1 hour ago
+                
+                const timestamps = logs
+                    .map(log => log.timestamp)
+                    .filter(ts => ts && !isNaN(ts.getTime()))
+                    .filter(ts => ts < oneHourAgo) // Exclude timestamps from recent parsing
+                    .sort();
+                
+                if (timestamps.length === 0) {
+                    // If no valid log timestamps found, try to extract from messages
+                    const extractedTimestamps = logs
+                        .map(log => this.extractTimestampFromMessage(log.message))
+                        .filter(ts => ts !== null)
+                        .sort();
+                    
+                    if (extractedTimestamps.length === 0) return 'Unknown timespan';
+                    
+                    const start = extractedTimestamps[0];
+                    const end = extractedTimestamps[extractedTimestamps.length - 1];
+                    const duration = end - start;
+                    
+                    console.log('📊 Timespan calculation (from messages):');
+                    console.log('  Start timestamp:', start.toISOString(), '(' + start.toLocaleString() + ')');
+                    console.log('  End timestamp:', end.toISOString(), '(' + end.toLocaleString() + ')');
+                    console.log('  Duration (ms):', duration);
+                    console.log('  Duration (hours):', duration / 3600000);
+                    
+                    if (duration < 60000) return `${Math.round(duration/1000)}s`;
+                    if (duration < 3600000) return `${Math.round(duration/60000)}m`;
+                    return `${Math.round(duration/3600000)}h`;
+                }
+                
+                const start = timestamps[0];
+                const end = timestamps[timestamps.length - 1];
+                const duration = end - start;
+                
+                // Debug logging to see what timestamps we're working with
+                console.log('📊 Timespan calculation (filtered):');
+                console.log('  Valid timestamps found:', timestamps.length);
+                console.log('  Start timestamp:', start.toISOString(), '(' + start.toLocaleString() + ')');
+                console.log('  End timestamp:', end.toISOString(), '(' + end.toLocaleString() + ')');
+                console.log('  Duration (ms):', duration);
+                console.log('  Duration (hours):', duration / 3600000);
+                
+                if (duration < 60000) return `${Math.round(duration/1000)}s`;
+                if (duration < 3600000) return `${Math.round(duration/60000)}m`;
+                return `${Math.round(duration/3600000)}h`;
+            }
+
+            extractTimestampFromMessage(message) {
+                // Look for timestamp patterns in the message content
+                const timestampMatch = message.match(/\[(\d{4}-\d{2}-\d{2}[\s\T]\d{2}:\d{2}:\d{2})\]/);
+                if (timestampMatch) {
+                    const parsed = new Date(timestampMatch[1]);
+                    if (!isNaN(parsed.getTime())) {
+                        return parsed;
+                    }
+                }
+                
+                // Also try ISO-like patterns without brackets
+                const isoMatch = message.match(/(\d{4}-\d{2}-\d{2}[\s\T]\d{2}:\d{2}:\d{2})/);
+                if (isoMatch) {
+                    const parsed = new Date(isoMatch[1]);
+                    if (!isNaN(parsed.getTime())) {
+                        return parsed;
+                    }
+                }
+                
+                return null;
+            }
+
+            getMostCommonErrors(logs) {
+                const errorCounts = {};
+                logs.filter(log => log.level === 'ERROR')
+                    .forEach(log => {
+                        const key = log.message.substring(0, 100); // First 100 chars
+                        errorCounts[key] = (errorCounts[key] || 0) + 1;
+                    });
+                
+                return Object.entries(errorCounts)
+                    .sort(([,a], [,b]) => b - a)
+                    .slice(0, 3)
+                    .map(([message, count]) => ({ message, count }));
+            }
+
+            renderAnalysisResults(summary, issues) {
+                let html = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Summary Section -->
+                        <div class="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-slate-700 transition-colors duration-300">
+                            <h4 class="text-md font-semibold text-gray-800 dark:text-white mb-3 flex items-center">
+                                <i class="fas fa-chart-bar text-blue-600 mr-2"></i>
+                                Log Summary
+                            </h4>
+                            <div class="grid grid-cols-2 gap-3 text-sm text-gray-700 dark:text-gray-300">
+                                <div>Total Entries: <span class="font-semibold">${summary.total}</span></div>
+                                <div>Timespan: <span class="font-semibold">${summary.timespan}</span></div>
+                                <div class="text-red-600">Errors: <span class="font-semibold">${summary.errors}</span></div>
+                                <div class="text-orange-600">Warnings: <span class="font-semibold">${summary.warnings}</span></div>
+                                <div class="text-green-600">Success: <span class="font-semibold">${summary.success}</span></div>
+                            </div>
+                        </div>
+
+                        <!-- Health Score -->
+                        <div class="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-slate-700 transition-colors duration-300">
+                            <h4 class="text-md font-semibold text-gray-800 dark:text-white mb-3 flex items-center">
+                                <i class="fas fa-heartbeat text-red-600 mr-2"></i>
+                                Health Score
+                            </h4>
+                            ${this.renderHealthScore(summary, issues)}
+                        </div>
+                    </div>
+                `;
+
+                if (issues.length > 0) {
+                    html += `
+                        <div class="mt-6">
+                            <h4 class="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center">
+                                <i class="fas fa-exclamation-triangle text-orange-600 mr-2"></i>
+                                Identified Issues & Solutions
+                            </h4>
+                            <div class="space-y-4">
+                    `;
+                    
+                    issues.forEach(issue => {
+                        html += this.renderIssueCard(issue);
+                    });
+                    
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="mt-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 transition-colors duration-300">
+                            <div class="flex items-center text-green-800 dark:text-green-300">
+                                <i class="fas fa-check-circle text-green-600 mr-2"></i>
+                                <span class="font-semibold">No Known Issues Detected</span>
+                            </div>
+                            <p class="text-green-700 dark:text-green-400 text-sm mt-1">Your logs don't contain any recognized error patterns. Great job!</p>
+                        </div>
+                    `;
+                }
+
+                return html;
+            }
+
+            renderHealthScore(summary, issues) {
+                const errorRate = summary.total > 0 ? (summary.errors / summary.total) * 100 : 0;
+                const warningRate = summary.total > 0 ? (summary.warnings / summary.total) * 100 : 0;
+                
+                // Enhanced scoring for automation-specific issues
+                let score = 100;
+                score -= errorRate * 2; // Errors are weighted heavily
+                score -= warningRate * 0.5; // Warnings are weighted lightly
+                
+                // Specific deductions for critical automation issues
+                const criticalIssues = issues.filter(i => ['distribution-group', 'graph-api-query', 'missing-permissions'].includes(i.type));
+                const moderateIssues = issues.filter(i => ['data-quality', 'retry-patterns'].includes(i.type));
+                const successfulFallbacks = issues.filter(i => i.type === 'user-fallback-success');
+                
+                score -= criticalIssues.length * 15; // Critical automation issues
+                score -= moderateIssues.length * 8;  // Moderate issues
+                score -= (issues.length - criticalIssues.length - moderateIssues.length - successfulFallbacks.length) * 5; // Other issues
+                score += successfulFallbacks.length * 5;  // Bonus for successful user fallbacks
+                
+                score = Math.max(0, Math.round(score));
+                
+                let color = 'green';
+                let icon = 'fas fa-check-circle';
+                let status = 'Automation Running Smoothly';
+                
+                if (score < 40) { 
+                    color = 'red'; 
+                    icon = 'fas fa-times-circle'; 
+                    status = 'Critical Automation Issues';
+                } else if (score < 70) { 
+                    color = 'orange'; 
+                    icon = 'fas fa-exclamation-circle'; 
+                    status = 'Automation Needs Attention';
+                } else if (score < 90) {
+                    color = 'yellow'; 
+                    icon = 'fas fa-exclamation-triangle'; 
+                    status = 'Minor Issues Detected';
+                }
+                
+                // Add specific insights based on detected issues
+                const insights = this.generateAutomationInsights(issues, summary);
+                
+                return `
+                    <div class="text-center">
+                        <div class="text-3xl font-bold text-${color}-600">${score}/100</div>
+                        <div class="flex items-center justify-center mt-2 text-${color}-600">
+                            <i class="${icon} mr-1"></i>
+                            <span class="text-sm font-medium">${status}</span>
+                        </div>
+                        ${insights ? `<div class="mt-3 text-xs text-gray-600 dark:text-gray-400">${insights}</div>` : ''}
+                    </div>
+                `;
+            }
+            
+            generateAutomationInsights(issues, summary) {
+                const insights = [];
+                
+                if (issues.some(i => i.type === 'user-fallback-success')) {
+                    const count = issues.find(i => i.type === 'user-fallback-success').count;
+                    insights.push(`✅ ${count} user email(s) processed successfully`);
+                }
+                if (issues.some(i => i.type === 'distribution-group')) {
+                    insights.push('📧 Email group lookup issues detected');
+                }
+                if (issues.some(i => i.type === 'graph-api-query')) {
+                    insights.push('🔍 Graph API query syntax problems');
+                }
+                if (issues.some(i => i.type === 'missing-permissions')) {
+                    insights.push('🔑 Missing API permissions');
+                }
+                if (issues.some(i => i.type === 'data-quality')) {
+                    insights.push('📋 Calendar event data issues');
+                }
+                if (summary.errors > summary.warnings * 2) {
+                    insights.push('⚠️ High error-to-warning ratio');
+                }
+                
+                return insights.length > 0 ? insights.slice(0, 3).join(' • ') : null;
+            }
+
+            renderIssueCard(issue) {
+                return `
+                    <div class="bg-white dark:bg-slate-800 border-l-4 border-${issue.color}-500 rounded-lg p-4 shadow-sm transition-colors duration-300">
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0">
+                                <i class="${issue.icon} text-${issue.color}-600 text-lg"></i>
+                            </div>
+                            <div class="ml-3 flex-1">
+                                <h5 class="text-md font-semibold text-${issue.color}-600 dark:text-${issue.color}-400">${issue.title}</h5>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">${issue.description}</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">Found in ${issue.count} log entries</p>
+                                
+                                <div class="mt-3 bg-${issue.color}-50 dark:bg-${issue.color}-900/20 border border-${issue.color}-200 dark:border-${issue.color}-800 rounded-md p-3">
+                                    <h6 class="text-sm font-medium text-${issue.color}-800 dark:text-${issue.color}-200 flex items-center">
+                                        <i class="fas fa-tools mr-1"></i>
+                                        Recommended Solution:
+                                    </h6>
+                                    <p class="text-sm text-${issue.color}-700 dark:text-${issue.color}-300 mt-1">${issue.solution}</p>
+                                </div>
+                                
+                                ${issue.logs.length > 0 ? `
+                                    <div class="mt-3">
+                                        <button class="text-xs text-${issue.color}-600 dark:text-${issue.color}-400 hover:text-${issue.color}-800 dark:hover:text-${issue.color}-200 font-medium" 
+                                                onclick="toggleExampleLogs('${issue.type}-logs')">
+                                            <i class="fas fa-eye mr-1"></i>Show Example Logs
+                                        </button>
+                                        <div id="${issue.type}-logs" style="display: none;" class="mt-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-2 text-xs font-mono">
+                                            ${issue.logs.map(log => `<div class="text-gray-700 dark:text-gray-300">${this.escapeHtml(log.rawLine || log.message)}</div>`).join('')}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function toggleExampleLogs(elementId) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                const isVisible = element.style.display !== 'none';
+                element.style.display = isVisible ? 'none' : 'block';
+                
+                // Update button text and icon
+                const button = element.previousElementSibling;
+                if (button) {
+                    const icon = button.querySelector('i');
+                    const text = isVisible ? 'Show Example Logs' : 'Hide Example Logs';
+                    if (icon) {
+                        icon.className = `fas fa-${isVisible ? 'eye' : 'eye-slash'} mr-1`;
+                    }
+                    button.innerHTML = `<i class="fas fa-${isVisible ? 'eye' : 'eye-slash'} mr-1"></i>${text}`;
+                }
+            }
+        }
+
+        // Dark Mode Toggle
+        function initDarkMode() {
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            const darkModeIcon = document.getElementById('darkModeIcon');
+            const body = document.body;
+            const html = document.documentElement;
+            
+            // Check for saved dark mode preference or default to light mode
+            const isDarkMode = localStorage.getItem('darkMode') === 'true';
+            
+            if (isDarkMode) {
+                body.classList.add('dark');
+                html.classList.add('dark');
+                darkModeIcon.className = 'fas fa-sun text-sm';
+                darkModeToggle.querySelector('span').textContent = 'Light';
+            }
+            
+            darkModeToggle.addEventListener('click', () => {
+                body.classList.toggle('dark');
+                html.classList.toggle('dark');
+                const isDark = body.classList.contains('dark');
+                
+                if (isDark) {
+                    darkModeIcon.className = 'fas fa-sun text-sm';
+                    darkModeToggle.querySelector('span').textContent = 'Light';
+                    localStorage.setItem('darkMode', 'true');
+                } else {
+                    darkModeIcon.className = 'fas fa-moon text-sm';
+                    darkModeToggle.querySelector('span').textContent = 'Dark';
+                    localStorage.setItem('darkMode', 'false');
+                }
+            });
+        }
+
+        // Initialize the log viewer when the page loads
+        let azureLogViewer;
+        document.addEventListener('DOMContentLoaded', function() {
+            initDarkMode();
+            azureLogViewer = new AzureLogViewer();
+            
+            // Update footer timestamp
+            const now = new Date();
+            document.getElementById('lastUpdated').textContent = now.toLocaleString();
+        });
+    </script>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 dark:bg-slate-950 text-gray-300 dark:text-slate-400 py-8 transition-colors duration-300">
+        <div class="w-full max-w-none px-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-shield-alt text-azure-blue"></i>
+                    <span class="text-sm">Secured by Azure</span>
+                </div>
+                <div class="text-sm">
+                    <span>Last updated: <span id="lastUpdated">-</span></span>
+                </div>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
