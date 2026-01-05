@@ -1,4 +1,4 @@
-﻿
+
 #region ===================== AVD Connectivity Monitor (function) =====================
 
 function Start-AVDConnectivityMonitor {
@@ -37,15 +37,6 @@ function Start-AVDConnectivityMonitor {
 
 .PARAMETER RunMinutes
   Total duration in minutes. Default: 20.
-
-.OUTPUTS
-  CSV rows with: Timestamp, ComputerName, Category, Target, Protocol, Port, Success, SuccessDetail, LatencyMs, RemoteAddress, ResolvedIP, ErrorText.
-
-.EXAMPLE
-  Start-AVDConnectivityMonitor
-
-.EXAMPLE
-  Start-AVDConnectivityMonitor -ExternalTargets 'www.bbc.com' -MicrosoftTargets 'login.microsoftonline.com' -EnableUdp
 #>
 
     [CmdletBinding()]
@@ -56,8 +47,8 @@ function Start-AVDConnectivityMonitor {
         [switch]   $EnableUdp,
         [int[]]    $UdpPorts          = @(3390,3478),
         [int[]]    $TcpPorts          = @(443),
-        [int]      $IntervalSeconds   = 10,   # per your requirement
-        [int]      $RunMinutes        = 20    # per your requirement
+        [int]      $IntervalSeconds   = 10,   # requested default
+        [int]      $RunMinutes        = 20    # requested default
     )
 
     $ErrorActionPreference = 'Stop'
@@ -81,26 +72,26 @@ function Start-AVDConnectivityMonitor {
         try { New-EventLog -LogName $eventLog -Source $eventSource -ErrorAction SilentlyContinue } catch { $EnableEventLog = $false }
     }
 
-    function Write-FailureEvent([string]$Target, [string]$Category, [string]$Message) {
+    function Write-FailureEvent([string]$TargetText, [string]$CategoryText, [string]$MessageText) {
         if ($EnableEventLog) {
             try {
-                $msg = ("[Category={0}] {1}" -f $Category, $Message)
+                $msg = ("[Category={0}] {1}" -f $CategoryText, $MessageText)
                 Write-EventLog -LogName $eventLog -Source $eventSource -EntryType Error -EventId 60100 -Message $msg
             } catch { }
         }
     }
 
     # --- Utilities (PS 5.1-safe) ---
-    function Resolve-FirstIp([string]$host) {
+    function Resolve-FirstIp([string]$TargetHost) {
         try {
-            $ip = [System.Net.Dns]::GetHostAddresses($host) | Select-Object -First 1
+            $ip = [System.Net.Dns]::GetHostAddresses($TargetHost) | Select-Object -First 1
             if ($ip) { return $ip.IPAddressToString } else { return $null }
         } catch { return $null }
     }
 
-    function Test-TcpOnce([string]$host, [int]$port) {
+    function Test-TcpOnce([string]$TargetHost, [int]$TargetPort) {
         try {
-            $res = Test-NetConnection -ComputerName $host -Port $port -WarningAction SilentlyContinue -InformationLevel Detailed
+            $res = Test-NetConnection -ComputerName $TargetHost -Port $TargetPort -WarningAction SilentlyContinue -InformationLevel Detailed
             $latency = $null
             if ($res.PingReplyDetails) { $latency = $res.PingReplyDetails.RoundtripTime }
             $detail = if ($res.TcpTestSucceeded) { 'TcpHandshakeOk' } else { 'TcpHandshakeFailedOrTimeout' }
@@ -122,13 +113,13 @@ function Start-AVDConnectivityMonitor {
         }
     }
 
-    function Test-UdpOnce([string]$host, [int]$port, [int]$timeoutMs = 1200) {
+    function Test-UdpOnce([string]$TargetHost, [int]$TargetPort, [int]$TimeoutMs = 1200) {
         # Best-effort UDP probe (no handshake). "No response" is expected; success = "probe sent".
         try {
-            $resolved = Resolve-FirstIp $host
+            $resolved = Resolve-FirstIp $TargetHost
             $client   = New-Object System.Net.Sockets.UdpClient
-            $client.Client.ReceiveTimeout = $timeoutMs
-            $client.Connect($host, [int]$port)
+            $client.Client.ReceiveTimeout = $TimeoutMs
+            $client.Connect($TargetHost, [int]$TargetPort)
             $payload = 0x01,0x02,0x03,0x04
             $start   = Get-Date
             [void]$client.Send($payload, $payload.Length)
@@ -225,7 +216,7 @@ function Start-AVDConnectivityMonitor {
 
                 # --- TCP tests ---
                 foreach ($tp in $TcpPorts) {
-                    $tcp = Test-TcpOnce -host $target -port $tp
+                    $tcp = Test-TcpOnce -TargetHost $target -TargetPort $tp
 
                     $latOut    = if ($tcp.LatencyMs) { $tcp.LatencyMs } else { '' }
                     $remoteOut = if ($tcp.RemoteAddress) { $tcp.RemoteAddress } else { '' }
@@ -238,14 +229,14 @@ function Start-AVDConnectivityMonitor {
 
                     if (-not $tcp.Success) {
                         $msg = ("TCP:{0} failed ({1}). {2}" -f $tp, $tcp.SuccessDetail, $tcp.ErrorText)
-                        Write-FailureEvent -Target $target -Category $set.Category -Message $msg
+                        Write-FailureEvent -TargetText $target -CategoryText $set.Category -MessageText $msg
                     }
                 }
 
                 # --- UDP probes (optional/best-effort) ---
                 if ($EnableUdp) {
                     foreach ($up in $UdpPorts) {
-                        $udp = Test-UdpOnce -host $target -port $up
+                        $udp = Test-UdpOnce -TargetHost $target -TargetPort $up
                         $latOut    = if ($udp.LatencyMs) { $udp.LatencyMs } else { '' }
                         $remoteOut = if ($udp.RemoteAddress) { $udp.RemoteAddress } else { '' }
                         $errOut    = if ($udp.ErrorText) { '"' + $udp.ErrorText.Replace('"','''') + '"' } else { '' }
@@ -257,7 +248,7 @@ function Start-AVDConnectivityMonitor {
 
                         if (-not $udp.Success) {
                             $msg = ("UDP:{0} failed ({1}). {2}" -f $up, $udp.SuccessDetail, $udp.ErrorText)
-                            Write-FailureEvent -Target $target -Category $set.Category -Message $msg
+                            Write-FailureEvent -TargetText $target -CategoryText $set.Category -MessageText $msg
                         }
                     }
                 }
